@@ -1,0 +1,29 @@
+<div class="signup-container">
+    <h2>Signup</h2>
+    <form [formGroup]="signupForm" (ngSubmit)="onSubmit()">
+      <div>
+        <label for="username">Username:</label>
+        <input id="username" formControlName="username" placeholder="Enter your username">
+      </div>
+      <div>
+        <label for="email">Email:</label>
+        <input id="email" formControlName="email" placeholder="Enter your email">
+        <button type="button" (click)="verifyEmail()">Email Verify</button>
+      </div>
+      <div>
+        <label for="role">Role:</label>
+        <select id="role" formControlName="role">
+          <option value="" disabled selected>Select your role</option>
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div>
+        <label for="password">Password:</label>
+        <input type="password" id="password" formControlName="password" placeholder="Enter your password">
+      </div>
+      <div *ngIf="errorMessage" class="error">{{ errorMessage }}</div>
+      <button type="submit">Signup</button>
+    </form>
+  </div>
+  

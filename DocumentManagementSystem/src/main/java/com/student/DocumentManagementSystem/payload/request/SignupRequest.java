@@ -19,6 +19,7 @@ public class SignupRequest {
     @Size(min = 6, max = 40)
     private String password;
 
+    // Getters and Setters
     public String getUsername() {
         return username;
     }

@@ -1,0 +1,29 @@
+header {
+    background: #4a90e2;
+    color: white;
+    padding: 1em;
+    text-align: center;
+  }
+  
+  nav a {
+    color: white;
+    margin: 0 10px;
+    text-decoration: none;
+  }
+  
+  nav a:hover {
+    text-decoration: underline;
+  }
+  
+  .about {
+    margin: 2em;
+    padding: 1em;
+    border: 1px solid #ccc;
+  }
+  
+  footer {
+    text-align: center;
+    padding: 1em;
+    background: #f2f2f2;
+  }
+  

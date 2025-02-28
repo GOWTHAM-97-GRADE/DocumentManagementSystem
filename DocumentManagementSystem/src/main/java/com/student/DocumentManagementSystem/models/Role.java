@@ -2,7 +2,6 @@ package com.student.DocumentManagementSystem.models;
 
 import javax.persistence.*;
 
-
 @Entity
 @Table(name = "roles")
 public class Role {
@@ -11,11 +10,14 @@ public class Role {
     private Integer id;
 
     @Enumerated(EnumType.STRING)
-    @Column(length = 20)
+    @Column(length = 20, unique = true)
     private ERole name;
 
-    public Role() {
+    public Role() {}
 
+    public Role(Integer id, ERole name) {
+        this.id = id;
+        this.name = name;
     }
 
     public Role(ERole name) {
