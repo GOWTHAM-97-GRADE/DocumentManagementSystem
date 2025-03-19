@@ -1,0 +1,29 @@
+<div class="admin-container">
+  <h2>User Management</h2>
+  <div class="toolbar">
+    <button (click)="deleteAllUsers()">Delete All Users</button>
+  </div>
+  <div class="error" *ngIf="errorMessage">{{ errorMessage }}</div>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Username</th>
+        <th>Email</th>
+        <th>Enabled</th>
+        <th>Roles</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let user of users">
+        <td>{{ user.id }}</td>
+        <td>{{ user.username }}</td>
+        <td>{{ user.email }}</td>
+        <td>{{ user.enabled === 1 ? 'Yes' : 'No' }}</td>
+        <td>{{ user.roles.join(', ') }}</td>
+        <td><button (click)="deleteUser(user.id)">Delete</button></td>
+      </tr>
+    </tbody>
+  </table>
+</div>

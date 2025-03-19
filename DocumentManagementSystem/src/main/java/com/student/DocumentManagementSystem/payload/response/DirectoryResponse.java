@@ -1,7 +1,7 @@
 package com.student.DocumentManagementSystem.payload.response;
 
-import lombok.Data;
 import lombok.AllArgsConstructor;
+import lombok.Data;
 
 @Data
 @AllArgsConstructor

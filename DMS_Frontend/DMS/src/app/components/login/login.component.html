@@ -1,0 +1,60 @@
+<div class="page-wrapper" [ngClass]="{'dark-theme': isDarkTheme}">
+  <!-- Theme Switch (Top Right) -->
+  <div class="theme-switch-container">
+    <span class="theme-switch">
+      <label class="switch">
+        <input type="checkbox" [checked]="isDarkTheme" (change)="toggleTheme()">
+        <span class="slider round"></span>
+      </label>
+      <span class="theme-label">Theme</span>
+    </span>
+  </div>
+
+  <!-- Page Header -->
+  <header class="page-header">
+    <h1>Welcome Back to <span class="highlight">oneDMS</span></h1>
+    <p class="subtext">Securely access your documents</p>
+  </header>
+
+  <!-- Login Container -->
+  <div class="login-container">
+    <form (submit)="onLogin($event)" class="login-form">
+      <div class="input-group">
+        <input
+          type="text"
+          [(ngModel)]="username"
+          name="username"
+          placeholder="Username"
+          required
+          autocomplete="username"
+          [class.invalid]="loginError"
+        />
+      </div>
+      <div class="input-group">
+        <input
+          type="password"
+          [(ngModel)]="password"
+          name="password"
+          placeholder="Password"
+          required
+          autocomplete="current-password"
+          [class.invalid]="loginError"
+        />
+      </div>
+      <button type="submit" [disabled]="isLoading" class="btn primary">
+        {{ isLoading ? 'Logging In...' : 'Login' }}
+        <span class="btn-icon" *ngIf="!isLoading">→</span>
+      </button>
+      <p class="error-msg" *ngIf="loginError">{{ loginError }}</p>
+    </form>
+
+    <div class="login-links">
+      <p>
+        <a (click)="goToForgotPassword()" class="nav-link">Forgot Password?</a>
+      </p>
+      <p>
+        New User? <a (click)="goToSignup()" class="nav-link">Signup Here</a>
+      </p>
+    </div>
+  </div>
+</div>

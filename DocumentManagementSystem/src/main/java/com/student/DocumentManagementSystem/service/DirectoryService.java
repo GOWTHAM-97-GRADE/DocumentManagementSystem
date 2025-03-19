@@ -11,4 +11,9 @@ public interface DirectoryService {
     DirectoryResponse renameDirectory(Long id, RenameDirectoryRequest request);
     void deleteDirectory(Long id);
     List<DirectoryResponse> getAllDirectories();
+
+    // New methods:
+    List<DirectoryResponse> getSubdirectories(Long parentId);
+    DirectoryResponse moveDirectory(Long id, Long newParentId);
+    DirectoryResponse getDirectory(Long id);
 }

@@ -1,0 +1,87 @@
+<div class="home-container" [ngClass]="{'dark-theme': isDarkTheme}">
+    <div class="main-content">
+      <!-- Header with Theme Switch -->
+      <header class="header">
+        <h1>
+          Welcome to <span class="highlight">oneDMS</span>
+          <span class="theme-switch">
+            <label class="switch">
+              <input type="checkbox" [(ngModel)]="isDarkTheme" (ngModelChange)="toggleTheme($event)">
+              <span class="slider round"></span>
+            </label>
+            <span class="theme-label">Theme</span>
+          </span>
+        </h1>
+        <p class="subtext">
+          A Smarter Way to Organize, Access, and Manage Your Documents
+        </p>
+      </header>
+      
+      <!-- Button Actions -->
+      <div class="button-container">
+        <button class="btn primary" (click)="navigateToLogin($event)">Login</button>
+        <button class="btn secondary" (click)="navigateToSignup($event)">Signup</button>
+      </div>
+      
+      <!-- About Section -->
+      <section class="about-section">
+        <h2>Why Choose oneDMS?</h2>
+        <p>
+          oneDMS simplifies document management with powerful tools for seamless collaboration, organization, and control.
+        </p>
+        <div class="feature-grid">
+          <div class="feature">
+            <h3><span class="icon">🔑</span> Role-Based Access</h3>
+            <p>Control who can view, edit, or manage documents with user-specific permissions.</p>
+          </div>
+          <div class="feature">
+            <h3><span class="icon">🔍</span> Smart Filters</h3>
+            <p>Quickly find documents based on tags, categories, or metadata.</p>
+          </div>
+          <div class="feature">
+            <h3><span class="icon">📌</span> Favorites & Pinned Docs</h3>
+            <p>Star important documents for quick access anytime.</p>
+          </div>
+          <div class="feature">
+            <h3><span class="icon">📂</span> Version Control</h3>
+            <p>Track changes, restore previous versions, and maintain document history.</p>
+          </div>
+          <div class="feature">
+            <h3><span class="icon">💬</span> Comments & Annotations</h3>
+            <p>Collaborate with team members using in-document comments and notes.</p>
+          </div>
+          <div class="feature">
+            <h3><span class="icon">📜</span> Activity Logs & Seen Status</h3>
+            <p>Monitor document interactions and mark files as "Seen" for better tracking.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+    
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-columns">
+        <div class="footer-column company-details">
+          <h4>{{ companyName }}</h4>
+          <p><span class="footer-icon">📧</span> <a href="mailto:{{ companyEmail }}">{{ companyEmail }}</a></p>
+          <p><span class="footer-icon">📞</span> {{ companyPhone }}</p>
+          <p><span class="footer-icon">📍</span> {{ companyAddress }}</p>
+        </div>
+        <div class="footer-column quick-links">
+          <h4>Quick Links</h4>
+          <p><a href="#" (click)="navigateToSignup($event)">Signup</a></p>
+          <p><a href="#" (click)="navigateToLogin($event)">Login</a></p>
+        </div>
+        <div class="footer-column social-links">
+          <h4>Follow Us</h4>
+          <div class="social-icons">
+            <a href="https://linkedin.com" target="_blank" class="social-icon">💼 LinkedIn</a>
+            <a href="https://x.com" target="_blank" class="social-icon">🐦 X</a>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© {{ currentYear }} {{ companyName }}. All rights reserved.</p>
+      </div>
+    </footer>
+  </div>

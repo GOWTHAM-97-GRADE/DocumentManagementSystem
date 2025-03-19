@@ -1,0 +1,82 @@
+<div class="dms-container" [ngClass]="{'dark-theme': isDarkTheme}">
+  <div class="dms-header">
+    <h1>
+      <span class="highlight">oneDMS</span> Document Management
+      <span class="theme-switch">
+        <label class="switch">
+          <input type="checkbox" [(ngModel)]="isDarkTheme" (ngModelChange)="toggleTheme($event)">
+          <span class="slider round"></span>
+        </label>
+        <span class="theme-label">Theme</span>
+      </span>
+    </h1>
+    <div class="breadcrumb">
+      <span *ngFor="let path of currentPath; let i = index" class="breadcrumb-item">
+        <span 
+          [class.active]="i === currentPath.length - 1" 
+          [class.clickable]="i < currentPath.length - 1"
+          (click)="i < currentPath.length - 1 ? navigateBack() : null">
+          {{ path }}
+        </span>
+        <span *ngIf="i < currentPath.length - 1" class="separator">/</span>
+      </span>
+    </div>
+  </div>
+  
+  <div class="dms-content">
+    <div class="dms-toolbar">
+      <button class="btn primary" (click)="navigateBack()" [disabled]="currentPath.length <= 1">
+        <span class="icon">⬅️</span> Back
+      </button>
+      <button class="btn primary" (click)="createDirectory()" *ngIf="isModeratorOrAdmin()">
+        <span class="icon">📁</span> New Directory
+      </button>
+      <div class="upload-container">
+        <input type="file" multiple (change)="onFileSelected($event)" style="display: none;" #fileInput>
+        <button class="btn primary" (click)="fileInput.click()">
+          <span class="icon">📤</span> Upload Files
+        </button>
+      </div>
+      <button class="btn primary" [routerLink]="['admin']" *ngIf="isAdminUser()">
+        Admin Panel
+      </button>
+      <div class="search-container">
+        <input type="text" placeholder="Search documents..." class="search-input">
+        <button class="search-btn">🔍</button>
+      </div>
+      <div class="view-options">
+        <button class="btn secondary" title="List View">📋</button>
+        <button class="btn secondary" title="Grid View">📊</button>
+      </div>
+    </div>
+    
+    <div class="items-list">
+      <div *ngFor="let item of items" class="item-card" [ngClass]="{'directory': item.type === 'directory', 'file': item.type === 'file'}">
+        <div class="item-icon">
+          <span *ngIf="item.type === 'directory'">📁</span>
+          <span *ngIf="item.type === 'file'">📄</span>
+        </div>
+        <div class="item-details" (click)="onItemClick(item)">
+          <div class="item-name">{{ item.name }}</div>
+          <div class="item-type">{{ item.type }}</div>
+        </div>
+        <div class="item-actions">
+          <button class="action-btn" (click)="renameItem(item)" *ngIf="item.type === 'directory' && isAdminUser()" title="Rename">✏️</button>
+          <button class="action-btn" (click)="moveDirectory(item)" *ngIf="item.type === 'directory' && isAdminUser()" title="Move">🚚</button>
+          <button class="action-btn" (click)="addComment(item)" *ngIf="item.type === 'file'" title="Add Comment">💬</button>
+          <button class="action-btn" (click)="viewComments(item)" *ngIf="item.type === 'file' && item.comments && item.comments.length > 0" title="View Comments">👁️</button>
+          <button class="action-btn" (click)="updateFile(item)" *ngIf="item.type === 'file' && isModeratorOrAdmin()" title="Update">🔄</button>
+          <button class="action-btn" (click)="downloadFile(item)" *ngIf="item.type === 'file'" title="Download">⬇️</button>
+          <button class="action-btn delete" (click)="deleteItem(item)" *ngIf="isAdminUser()" title="Delete">🗑️</button>
+        </div>
+      </div>
+      <div *ngIf="items.length === 0" class="empty-state">
+        <div class="empty-icon">📂</div>
+        <div class="empty-text">No items found in this directory</div>
+      </div>
+    </div>
+    <div class="error" *ngIf="errorMessage">{{ errorMessage }}</div>
+    <input type="file" (change)="onUpdateFileSelected($event)" style="display: none;" #updateFileInput>
+    <router-outlet></router-outlet>
+  </div>
+</div>
