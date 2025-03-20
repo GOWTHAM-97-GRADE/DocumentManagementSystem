@@ -15,68 +15,103 @@
         <span 
           [class.active]="i === currentPath.length - 1" 
           [class.clickable]="i < currentPath.length - 1"
-          (click)="i < currentPath.length - 1 ? navigateBack() : null">
+          (click)="i < currentPath.length - 1 ? navigateBack(i) : null">
           {{ path }}
         </span>
         <span *ngIf="i < currentPath.length - 1" class="separator">/</span>
       </span>
     </div>
   </div>
-  
+
   <div class="dms-content">
     <div class="dms-toolbar">
       <button class="btn primary" (click)="navigateBack()" [disabled]="currentPath.length <= 1">
-        <span class="icon">⬅️</span> Back
+        <span class="icon">⬅</span> Back
       </button>
       <button class="btn primary" (click)="createDirectory()" *ngIf="isModeratorOrAdmin()">
-        <span class="icon">📁</span> New Directory
+        <span class="icon">➕</span> New Directory
       </button>
-      <div class="upload-container">
-        <input type="file" multiple (change)="onFileSelected($event)" style="display: none;" #fileInput>
-        <button class="btn primary" (click)="fileInput.click()">
-          <span class="icon">📤</span> Upload Files
-        </button>
-      </div>
+      <input type="file" multiple (change)="onFileSelect($event)" style="display: none;" #fileInput>
+      <button class="btn primary" (click)="fileInput.click()">
+        <span class="icon">📤</span> Upload Files
+      </button>
       <button class="btn primary" [routerLink]="['admin']" *ngIf="isAdminUser()">
         Admin Panel
       </button>
       <div class="search-container">
-        <input type="text" placeholder="Search documents..." class="search-input">
-        <button class="search-btn">🔍</button>
+        <input type="text" placeholder="Search documents..." class="search-input" [(ngModel)]="searchQuery" (keyup.enter)="searchDocuments()">
+        <button class="search-btn" (click)="searchDocuments()">🔍</button>
       </div>
       <div class="view-options">
-        <button class="btn secondary" title="List View">📋</button>
-        <button class="btn secondary" title="Grid View">📊</button>
+        <button class="btn secondary" title="List View" (click)="setView('list')">📋</button>
+        <button class="btn secondary" title="Grid View" (click)="setView('grid')">📊</button>
       </div>
     </div>
-    
-    <div class="items-list">
-      <div *ngFor="let item of items" class="item-card" [ngClass]="{'directory': item.type === 'directory', 'file': item.type === 'file'}">
-        <div class="item-icon">
-          <span *ngIf="item.type === 'directory'">📁</span>
-          <span *ngIf="item.type === 'file'">📄</span>
-        </div>
-        <div class="item-details" (click)="onItemClick(item)">
-          <div class="item-name">{{ item.name }}</div>
-          <div class="item-type">{{ item.type }}</div>
-        </div>
-        <div class="item-actions">
-          <button class="action-btn" (click)="renameItem(item)" *ngIf="item.type === 'directory' && isAdminUser()" title="Rename">✏️</button>
-          <button class="action-btn" (click)="moveDirectory(item)" *ngIf="item.type === 'directory' && isAdminUser()" title="Move">🚚</button>
-          <button class="action-btn" (click)="addComment(item)" *ngIf="item.type === 'file'" title="Add Comment">💬</button>
-          <button class="action-btn" (click)="viewComments(item)" *ngIf="item.type === 'file' && item.comments && item.comments.length > 0" title="View Comments">👁️</button>
-          <button class="action-btn" (click)="updateFile(item)" *ngIf="item.type === 'file' && isModeratorOrAdmin()" title="Update">🔄</button>
-          <button class="action-btn" (click)="downloadFile(item)" *ngIf="item.type === 'file'" title="Download">⬇️</button>
-          <button class="action-btn delete" (click)="deleteItem(item)" *ngIf="isAdminUser()" title="Delete">🗑️</button>
+    <div class="error" *ngIf="errorMessage">{{ errorMessage }}</div>
+
+    <div class="items-list" [ngClass]="viewMode">
+      <div class="loading-state" *ngIf="isLoading">
+        <div class="spinner"></div>
+      </div>
+
+      <!-- Grid View -->
+      <div *ngIf="viewMode === 'grid'" class="grid-view">
+        <div *ngFor="let item of filteredItems" class="item-card" [ngClass]="{'directory': item.type === 'directory', 'file': item.type === 'file'}">
+          <div class="item-icon">
+            <span *ngIf="item.type === 'directory'">📁</span>
+            <span *ngIf="item.type === 'file'">{{ getFileIcon(item.name) }}</span>
+          </div>
+          <div class="item-details" (click)="onItemClick(item)">
+            <div class="item-name">{{ item.name }}</div>
+            <div class="item-type">{{ item.type }}</div>
+            <div class="item-comments" *ngIf="item.comments && item.comments.length > 0">
+              {{ item.comments.join(' | ') }}
+            </div>
+          </div>
+          <div class="item-actions">
+            <button class="action-btn" (click)="renameItem(item)" *ngIf="item.type === 'directory' && isAdminUser()" title="Rename">✏</button>
+            <button class="action-btn" (click)="moveDirectory(item)" *ngIf="item.type === 'directory' && isAdminUser()" title="Move">🚚</button>
+            <button class="action-btn" (click)="updateFile(item)" *ngIf="item.type === 'file' && isModeratorOrAdmin()" title="Update">📝</button>
+            <button class="action-btn" (click)="addComment(item)" *ngIf="item.type === 'file'" title="Add Comment">💬</button>
+            <button class="action-btn" (click)="downloadFile(item)" *ngIf="item.type === 'file'" title="Download">⬇</button>
+            <button class="action-btn delete" (click)="deleteItem(item)" *ngIf="isAdminUser()" title="Delete">🗑</button>
+          </div>
         </div>
       </div>
-      <div *ngIf="items.length === 0" class="empty-state">
+
+      <!-- List View -->
+      <table *ngIf="viewMode === 'list'" class="list-view">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Comments</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of filteredItems">
+            <td (click)="onItemClick(item)">{{ item.name }}</td>
+            <td>{{ item.type }}</td>
+            <td>{{ item.comments && item.comments.length > 0 ? item.comments.join(' | ') : 'None' }}</td>
+            <td>
+              <button class="action-btn" (click)="renameItem(item)" *ngIf="item.type === 'directory' && isAdminUser()" title="Rename">✏</button>
+              <button class="action-btn" (click)="moveDirectory(item)" *ngIf="item.type === 'directory' && isAdminUser()" title="Move">🚚</button>
+              <button class="action-btn" (click)="updateFile(item)" *ngIf="item.type === 'file' && isModeratorOrAdmin()" title="Update">📝</button>
+              <button class="action-btn" (click)="addComment(item)" *ngIf="item.type === 'file'" title="Add Comment">💬</button>
+              <button class="action-btn" (click)="downloadFile(item)" *ngIf="item.type === 'file'" title="Download">⬇</button>
+              <button class="action-btn delete" (click)="deleteItem(item)" *ngIf="isAdminUser()" title="Delete">🗑</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div *ngIf="!isLoading && filteredItems.length === 0" class="empty-state">
         <div class="empty-icon">📂</div>
         <div class="empty-text">No items found in this directory</div>
       </div>
     </div>
-    <div class="error" *ngIf="errorMessage">{{ errorMessage }}</div>
-    <input type="file" (change)="onUpdateFileSelected($event)" style="display: none;" #updateFileInput>
+
     <router-outlet></router-outlet>
   </div>
 </div>

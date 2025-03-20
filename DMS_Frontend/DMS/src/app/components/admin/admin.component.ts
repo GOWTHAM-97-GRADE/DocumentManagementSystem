@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { DmsService } from '../../services/dms.service';
+import { DmsService, UserResponse } from '../../services/dms.service';
 
 @Component({
   selector: 'app-admin',
@@ -10,7 +10,7 @@ import { DmsService } from '../../services/dms.service';
   styleUrls: ['./admin.component.css']
 })
 export class AdminComponent implements OnInit {
-  users: Array<{ id: number; username: string; email: string; enabled: number; roles: string[] }> = [];
+  users: UserResponse[] = [];
   errorMessage: string = '';
 
   constructor(private dmsService: DmsService) {}
@@ -22,13 +22,7 @@ export class AdminComponent implements OnInit {
   loadUsers() {
     this.dmsService.getAllUsers().subscribe({
       next: (users) => {
-        this.users = users.map(user => ({
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          enabled: user.enabled,
-          roles: user.roles // Already an array from backend JSON
-        }));
+        this.users = users;
         this.errorMessage = '';
       },
       error: (err) => {
@@ -54,7 +48,7 @@ export class AdminComponent implements OnInit {
   }
 
   deleteAllUsers() {
-    if (confirm('Are you sure you want to delete all users? This action cannot be undone.')) {
+    if (confirm('Are you sure you want to delete all users?')) {
       this.dmsService.deleteAllUsers(true).subscribe({
         next: () => {
           this.users = [];
@@ -66,5 +60,9 @@ export class AdminComponent implements OnInit {
         }
       });
     }
+  }
+
+  isUserEnabled(enabled: boolean): string {
+    return enabled ? 'Yes' : 'No';
   }
 }

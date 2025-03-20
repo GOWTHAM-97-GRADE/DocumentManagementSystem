@@ -9,8 +9,10 @@ import com.student.DocumentManagementSystem.payload.request.RenameDirectoryReque
 import com.student.DocumentManagementSystem.payload.response.DirectoryResponse;
 import com.student.DocumentManagementSystem.repository.DirectoryRepository;
 import com.student.DocumentManagementSystem.repository.UserRepository;
+import org.hibernate.Hibernate;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,119 +29,170 @@ public class DirectoryServiceImpl implements DirectoryService {
     }
 
     @Override
+    @Transactional
     public DirectoryResponse createDirectory(CreateDirectoryRequest request, String username) {
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
         Directory parent = null;
-        if(request.getParentId() != null) {
+        if (request.getParentId() != null) {
             parent = directoryRepository.findById(request.getParentId())
-                    .orElseThrow(() -> new DirectoryNotFoundException("Parent directory not found"));
-            // Check duplicate under the same parent
-            if(directoryRepository.findByNameAndParent(request.getName(), parent).isPresent()){
-                throw new DirectoryAlreadyExistsException("Directory with this name already exists under the parent directory");
+                    .orElseThrow(() -> new DirectoryNotFoundException("Parent directory not found: " + request.getParentId()));
+            if (directoryRepository.findByNameAndParent(request.getName(), parent).isPresent()) {
+                throw new DirectoryAlreadyExistsException("Directory '" + request.getName() + "' already exists under parent ID " + parent.getId());
             }
         } else {
-            if(directoryRepository.findByNameAndParentIsNull(request.getName()).isPresent()){
-                throw new DirectoryAlreadyExistsException("Directory with this name already exists at root level");
+            if (directoryRepository.findByNameAndParentIsNull(request.getName()).isPresent()) {
+                throw new DirectoryAlreadyExistsException("Directory '" + request.getName() + "' already exists at root level");
             }
         }
 
         Directory directory = new Directory();
         directory.setName(request.getName());
-        // Set path: if a parent exists, build the path using parent's path
-        if(parent != null) {
-            directory.setPath(parent.getPath() + "/" + request.getName());
-        } else {
-            directory.setPath(request.getPath() != null ? request.getPath() : request.getName());
-        }
         directory.setCreatedBy(user);
         directory.setCreatedAt(LocalDateTime.now());
         directory.setUpdatedAt(LocalDateTime.now());
         directory.setParent(parent);
+        directory.updatePath();
+
+        if (parent != null) {
+            parent.addSubdirectory(directory);
+        }
 
         directoryRepository.save(directory);
-        return new DirectoryResponse(directory.getId(), directory.getName(), directory.getPath(), username);
+        return mapToResponse(directory);
     }
 
     @Override
+    @Transactional
     public DirectoryResponse renameDirectory(Long id, RenameDirectoryRequest request) {
         Directory directory = directoryRepository.findById(id)
-                .orElseThrow(() -> new DirectoryNotFoundException("Directory not found"));
+                .orElseThrow(() -> new DirectoryNotFoundException("Directory not found: " + id));
 
-        // (Optionally, add duplicate check here if renaming would conflict with an existing folder.)
+        if (request.getNewName() == null || request.getNewName().trim().isEmpty()) {
+            throw new IllegalArgumentException("New name cannot be null or empty");
+        }
+
+        Directory parent = directory.getParent();
+        if (parent != null && directoryRepository.findByNameAndParent(request.getNewName(), parent)
+                .filter(d -> !d.getId().equals(id)).isPresent()) {
+            throw new DirectoryAlreadyExistsException("Directory '" + request.getNewName() + "' already exists under parent ID " + parent.getId());
+        } else if (parent == null && directoryRepository.findByNameAndParentIsNull(request.getNewName())
+                .filter(d -> !d.getId().equals(id)).isPresent()) {
+            throw new DirectoryAlreadyExistsException("Directory '" + request.getNewName() + "' already exists at root level");
+        }
+
         directory.setName(request.getNewName());
         directory.setUpdatedAt(LocalDateTime.now());
+        directory.updatePath();
 
         directoryRepository.save(directory);
-        return new DirectoryResponse(directory.getId(), directory.getName(), directory.getPath(),
-                directory.getCreatedBy().getUsername());
+        return mapToResponse(directory);
     }
 
     @Override
+    @Transactional
     public void deleteDirectory(Long id) {
-        if (!directoryRepository.existsById(id)) {
-            throw new DirectoryNotFoundException("Directory not found");
+        Directory directory = directoryRepository.findById(id)
+                .orElseThrow(() -> new DirectoryNotFoundException("Directory not found: " + id));
+
+        Directory parent = directory.getParent();
+        if (parent != null) {
+            parent.removeSubdirectory(directory);
+            directoryRepository.save(parent);
         }
-        directoryRepository.deleteById(id);
+        directoryRepository.delete(directory);
     }
 
     @Override
+    @Transactional(readOnly = true) // Transactional to keep session open
     public List<DirectoryResponse> getAllDirectories() {
-        return directoryRepository.findAll().stream()
-                .map(dir -> new DirectoryResponse(dir.getId(), dir.getName(), dir.getPath(),
-                        dir.getCreatedBy().getUsername()))
+        List<Directory> directories = directoryRepository.findAll();
+        directories.forEach(d -> Hibernate.initialize(d.getSubdirectories())); // Initialize lazy collection
+        return directories.stream()
+                .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
-    // New: Get subdirectories (folders inside a given directory)
     @Override
+    @Transactional(readOnly = true) // Transactional to keep session open
     public List<DirectoryResponse> getSubdirectories(Long parentId) {
         Directory parent = directoryRepository.findById(parentId)
-                .orElseThrow(() -> new DirectoryNotFoundException("Directory not found"));
-        List<Directory> subdirs = parent.getSubdirectories();
-        return subdirs.stream()
-                .map(dir -> new DirectoryResponse(dir.getId(), dir.getName(), dir.getPath(),
-                        dir.getCreatedBy().getUsername()))
+                .orElseThrow(() -> new DirectoryNotFoundException("Directory not found: " + parentId));
+        Hibernate.initialize(parent.getSubdirectories()); // Initialize lazy collection
+        return parent.getSubdirectories().stream()
+                .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
-    // New: Move a directory to a new parent
     @Override
+    @Transactional
     public DirectoryResponse moveDirectory(Long id, Long newParentId) {
         Directory directory = directoryRepository.findById(id)
-                .orElseThrow(() -> new DirectoryNotFoundException("Directory not found"));
+                .orElseThrow(() -> new DirectoryNotFoundException("Directory not found: " + id));
 
+        checkForCycle(directory, newParentId);
+
+        Directory oldParent = directory.getParent();
         Directory newParent = null;
-        if(newParentId != null) {
+        if (newParentId != null) {
             newParent = directoryRepository.findById(newParentId)
-                    .orElseThrow(() -> new DirectoryNotFoundException("New parent directory not found"));
-            // Check for duplicate in the new parent directory
-            if(directoryRepository.findByNameAndParent(directory.getName(), newParent).isPresent()){
-                throw new DirectoryAlreadyExistsException("A directory with the same name exists under the new parent");
+                    .orElseThrow(() -> new DirectoryNotFoundException("New parent directory not found: " + newParentId));
+            if (directoryRepository.findByNameAndParent(directory.getName(), newParent)
+                    .filter(d -> !d.getId().equals(id)).isPresent()) {
+                throw new DirectoryAlreadyExistsException("Directory '" + directory.getName() + "' already exists under parent ID " + newParentId);
             }
-            directory.setParent(newParent);
-            directory.setPath(newParent.getPath() + "/" + directory.getName());
-        } else {
-            // Moving to root level: check for duplicates at root
-            if(directoryRepository.findByNameAndParentIsNull(directory.getName()).isPresent()){
-                throw new DirectoryAlreadyExistsException("A directory with the same name exists at the root level");
-            }
-            directory.setParent(null);
-            directory.setPath(directory.getName());
+        } else if (directoryRepository.findByNameAndParentIsNull(directory.getName())
+                .filter(d -> !d.getId().equals(id)).isPresent()) {
+            throw new DirectoryAlreadyExistsException("Directory '" + directory.getName() + "' already exists at root level");
         }
+
+        if (oldParent != null) {
+            oldParent.removeSubdirectory(directory);
+            directoryRepository.save(oldParent);
+        }
+        directory.setParent(newParent);
+        if (newParent != null) {
+            newParent.addSubdirectory(directory);
+        }
+        directory.updatePath();
         directory.setUpdatedAt(LocalDateTime.now());
+
         directoryRepository.save(directory);
-        return new DirectoryResponse(directory.getId(), directory.getName(), directory.getPath(),
-                directory.getCreatedBy().getUsername());
+        if (newParent != null) {
+            directoryRepository.save(newParent);
+        }
+        return mapToResponse(directory);
     }
 
-    // New: Get details of a single directory
     @Override
+    @Transactional(readOnly = true) // Transactional to keep session open
     public DirectoryResponse getDirectory(Long id) {
         Directory directory = directoryRepository.findById(id)
-                .orElseThrow(() -> new DirectoryNotFoundException("Directory not found"));
-        return new DirectoryResponse(directory.getId(), directory.getName(), directory.getPath(),
-                directory.getCreatedBy().getUsername());
+                .orElseThrow(() -> new DirectoryNotFoundException("Directory not found: " + id));
+        Hibernate.initialize(directory.getSubdirectories()); // Initialize lazy collection
+        return mapToResponse(directory);
+    }
+
+    private DirectoryResponse mapToResponse(Directory directory) {
+        return new DirectoryResponse(
+                directory.getId(),
+                directory.getName(),
+                directory.getPath(),
+                directory.getCreatedBy().getUsername()
+        );
+    }
+
+    private void checkForCycle(Directory directory, Long newParentId) {
+        if (newParentId != null && newParentId.equals(directory.getId())) {
+            throw new IllegalArgumentException("Cannot move directory into itself");
+        }
+        Directory current = directory.getParent();
+        while (current != null) {
+            if (current.getId().equals(newParentId)) {
+                throw new IllegalArgumentException("Cannot move directory into its own subdirectory");
+            }
+            current = current.getParent();
+        }
     }
 }

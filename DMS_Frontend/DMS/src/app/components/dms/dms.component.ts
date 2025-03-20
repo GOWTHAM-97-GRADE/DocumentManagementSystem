@@ -1,13 +1,13 @@
-import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
-import { DmsService } from '../../services/dms.service';
+import { DmsService, CreateDirectoryRequest, DirectoryContentResponse, FileResponse } from '../../services/dms.service';
 import { AuthService } from '../../services/auth.service';
 
 interface DmsItem {
   type: 'directory' | 'file';
-  id: string | number;
+  id: number | string; // number for directories, string (UUID) for files
   name: string;
   comments?: string[];
 }
@@ -17,19 +17,20 @@ interface DmsItem {
   standalone: true,
   imports: [FormsModule, CommonModule, RouterModule],
   templateUrl: './dms.component.html',
-  styleUrls: ['./dms.component.css']
+  styleUrls: ['./dms.component.css'],
 })
 export class DmsComponent implements OnInit {
   isDarkTheme: boolean = false;
   items: DmsItem[] = [];
-  currentDirectory: number | null = null;
+  filteredItems: DmsItem[] = [];
+  currentDirectory: number | null = null; // null for root as per backend
   currentPath: string[] = ['Home'];
   currentPathIds: (number | null)[] = [null];
   errorMessage: string = '';
-  selectedFileForUpdate: DmsItem | null = null;
-
-  @ViewChild('fileInput') fileInput!: ElementRef;
-  @ViewChild('updateFileInput') updateFileInput!: ElementRef;
+  selectedFiles: File[] = [];
+  isLoading: boolean = false;
+  searchQuery: string = '';
+  viewMode: 'grid' | 'list' = 'grid';
 
   constructor(
     private router: Router,
@@ -44,19 +45,35 @@ export class DmsComponent implements OnInit {
   }
 
   loadItems() {
-    const directoryId = this.currentDirectory !== null ? this.currentDirectory : 0; // Root is 0
-    this.dmsService.getDirectoryContents(directoryId).subscribe({
-      next: (response) => {
-        this.items = [
-          ...response.subdirectories.map(dir => ({ type: 'directory' as const, id: dir.id, name: dir.name })),
-          ...response.files.map(file => ({ type: 'file' as const, id: file.id, name: file.name, comments: file.comments || [] }))
-        ];
-        this.errorMessage = '';
+    this.isLoading = true;
+    this.dmsService.getDirectoryContents(this.currentDirectory ?? 0).subscribe({
+      next: (response: DirectoryContentResponse) => {
+        // Ensure response and its properties are valid before mapping
+        if (response && Array.isArray(response.subdirectories) && Array.isArray(response.files)) {
+          this.items = [
+            ...response.subdirectories.map(dir => ({
+              type: 'directory' as const,
+              id: dir.id,
+              name: dir.name,
+            })),
+            ...response.files.map(file => ({
+              type: 'file' as const,
+              id: file.id,
+              name: file.name,
+              comments: file.comments || [],
+            })),
+          ];
+          this.filteredItems = [...this.items];
+          this.errorMessage = '';
+        } else {
+          this.errorMessage = 'Invalid response from server';
+        }
+        this.isLoading = false;
       },
       error: (err) => {
         this.errorMessage = err.message || 'Failed to load items';
-        console.error('Failed to load items:', err);
-      }
+        this.isLoading = false;
+      },
     });
   }
 
@@ -66,17 +83,24 @@ export class DmsComponent implements OnInit {
   }
 
   navigateToDirectory(id: number, name: string) {
-    this.currentPathIds.push(id);
-    this.currentPath.push(name);
     this.currentDirectory = id;
+    this.currentPath.push(name);
+    this.currentPathIds.push(id);
+    this.searchQuery = '';
     this.loadItems();
   }
 
-  navigateBack() {
+  navigateBack(index?: number) {
     if (this.currentPath.length > 1) {
-      this.currentPath.pop();
-      this.currentPathIds.pop();
+      if (index !== undefined) {
+        this.currentPath = this.currentPath.slice(0, index + 1);
+        this.currentPathIds = this.currentPathIds.slice(0, index + 1);
+      } else {
+        this.currentPath.pop();
+        this.currentPathIds.pop();
+      }
       this.currentDirectory = this.currentPathIds[this.currentPathIds.length - 1];
+      this.searchQuery = '';
       this.loadItems();
     }
   }
@@ -90,184 +114,240 @@ export class DmsComponent implements OnInit {
   createDirectory() {
     const name = prompt('Enter directory name:');
     if (name && name.trim()) {
+      this.isLoading = true;
       const request: CreateDirectoryRequest = {
         name: name.trim(),
-        parentId: this.currentDirectory !== null ? this.currentDirectory : undefined
+        parentId: this.currentDirectory ?? undefined,
       };
       this.dmsService.createDirectory(request).subscribe({
         next: (response) => {
           this.items.push({ type: 'directory', id: response.id, name: response.name });
+          this.filteredItems = [...this.items];
           this.errorMessage = '';
+          this.isLoading = false;
         },
         error: (err) => {
           this.errorMessage = err.message || 'Failed to create directory';
-          console.error('Failed to create directory:', err);
-        }
+          this.isLoading = false;
+        },
       });
     }
   }
 
-  onFileSelected(event: Event) {
+  onFileSelect(event: Event) {
     const input = event.target as HTMLInputElement;
-    if (input.files && input.files.length > 0) {
-      const files = Array.from(input.files);
-      const username = this.dmsService.getCurrentUsername();
-      if (!username) {
-        this.errorMessage = 'Username not found';
-        return;
-      }
-      this.dmsService.uploadFiles(this.currentDirectory || 0, files, username).subscribe({
-        next: (responses) => {
-          responses.forEach(response => {
-            this.items.push({ type: 'file', id: response.id, name: response.name, comments: response.comments || [] });
+    if (input.files) {
+      this.selectedFiles = Array.from(input.files);
+      this.uploadFiles();
+    }
+  }
+
+  uploadFiles() {
+    if (this.selectedFiles.length > 0) {
+      this.isLoading = true;
+      const directoryId = this.currentDirectory ?? 0;
+      const username = this.authService.getCurrentUser()?.username || 'anonymous';
+
+      // Capture original file names for reliability
+      const originalFileNames = this.selectedFiles.map(file => file.name);
+
+      this.dmsService.uploadFiles(directoryId, this.selectedFiles, username).subscribe({
+        next: (responses: FileResponse[]) => {
+          responses.forEach((response, index) => {
+            const originalName = originalFileNames[index];
+            this.items.push({
+              type: 'file',
+              id: response.id,
+              name: response.name || originalName, // Fallback to original name if API doesn't provide it
+              comments: response.comments || [],
+            });
           });
+          this.filteredItems = [...this.items];
+          this.selectedFiles = [];
           this.errorMessage = '';
-          input.value = ''; // Reset file input
+          this.isLoading = false;
         },
         error: (err) => {
           this.errorMessage = err.message || 'Failed to upload files';
-          console.error('Failed to upload files:', err);
-        }
-      });
-    }
-  }
-
-  updateFile(item: DmsItem) {
-    if (item.type === 'file') {
-      this.selectedFileForUpdate = item;
-      this.updateFileInput.nativeElement.click();
-    }
-  }
-
-  onUpdateFileSelected(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if (input.files && input.files.length > 0 && this.selectedFileForUpdate) {
-      const file = input.files[0];
-      this.dmsService.updateFile(this.selectedFileForUpdate.id as string, file).subscribe({
-        next: (response) => {
-          this.selectedFileForUpdate.name = response.name;
-          this.errorMessage = '';
-          input.value = ''; // Reset file input
+          this.isLoading = false;
         },
-        error: (err) => {
-          this.errorMessage = err.message || 'Failed to update file';
-          console.error('Failed to update file:', err);
-        }
-      });
-      this.selectedFileForUpdate = null;
-    }
-  }
-
-  moveDirectory(item: DmsItem) {
-    if (item.type === 'directory') {
-      const newParentId = prompt('Enter new parent directory ID (leave blank for root):');
-      const parsedId = newParentId ? parseInt(newParentId, 10) : undefined;
-      if (newParentId && isNaN(parsedId)) {
-        this.errorMessage = 'Invalid directory ID';
-        return;
-      }
-      this.dmsService.moveDirectory(item.id as number, parsedId).subscribe({
-        next: (response) => {
-          this.loadItems(); // Refresh to reflect new position
-          this.errorMessage = '';
-        },
-        error: (err) => {
-          this.errorMessage = err.message || 'Failed to move directory';
-          console.error('Failed to move directory:', err);
-        }
       });
     }
   }
 
   renameItem(item: DmsItem) {
+    if (item.type !== 'directory' || !this.isAdminUser() || !item.id) {
+      this.errorMessage = 'Invalid directory or insufficient permissions';
+      return;
+    }
     const newName = prompt('Enter new name:', item.name);
     if (newName && newName.trim()) {
-      if (item.type === 'directory') {
-        this.dmsService.renameDirectory(item.id as number, { name: newName }).subscribe({
-          next: (response) => {
-            item.name = response.name;
-            this.errorMessage = '';
-          },
-          error: (err) => {
-            this.errorMessage = err.message || 'Failed to rename directory';
-            console.error('Failed to rename directory:', err);
-          }
-        });
-      }
-    }
-  }
-
-  addComment(item: DmsItem) {
-    const comment = prompt('Add a comment:');
-    if (comment && comment.trim()) {
-      if (item.type === 'file') {
-        this.dmsService.addComment(item.id as string, comment).subscribe({
-          next: (response) => {
-            item.comments = response.comments || [];
-            this.errorMessage = '';
-          },
-          error: (err) => {
-            this.errorMessage = err.message || 'Failed to add comment';
-            console.error('Failed to add comment:', err);
-          }
-        });
-      }
-    }
-  }
-
-  deleteItem(item: DmsItem) {
-    if (confirm(`Delete ${item.type} "${item.name}"?`)) {
-      if (item.type === 'directory') {
-        this.dmsService.deleteDirectory(item.id as number).subscribe({
-          next: () => {
-            this.items = this.items.filter(i => i.id !== item.id);
-            this.errorMessage = '';
-          },
-          error: (err) => {
-            this.errorMessage = err.message || 'Failed to delete directory';
-            console.error('Failed to delete directory:', err);
-          }
-        });
-      } else {
-        this.dmsService.deleteFile(item.id as string).subscribe({
-          next: () => {
-            this.items = this.items.filter(i => i.id !== item.id);
-            this.errorMessage = '';
-          },
-          error: (err) => {
-            this.errorMessage = err.message || 'Failed to delete file';
-            console.error('Failed to delete file:', err);
-          }
-        });
-      }
-    }
-  }
-
-  downloadFile(item: DmsItem) {
-    if (item.type === 'file') {
-      this.dmsService.downloadFile(item.id as string).subscribe({
-        next: (blob) => {
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = item.name;
-          a.click();
-          window.URL.revokeObjectURL(url);
+      this.isLoading = true;
+      this.dmsService.renameDirectory(item.id as number, { name: newName }).subscribe({
+        next: (response) => {
+          item.name = response.name;
+          this.filteredItems = [...this.items];
           this.errorMessage = '';
+          this.isLoading = false;
         },
         error: (err) => {
-          this.errorMessage = err.message || 'Failed to download file';
-          console.error('Failed to download file:', err);
-        }
+          this.errorMessage = err.message || 'Failed to rename directory';
+          this.isLoading = false;
+        },
       });
     }
   }
 
-  viewComments(item: DmsItem) {
-    const comments = item.comments && item.comments.length > 0
-      ? item.comments.join('\n- ')
-      : 'No comments yet';
-    alert(`Comments for ${item.name}:\n- ${comments}`);
+  moveDirectory(item: DmsItem) {
+    if (item.type !== 'directory' || !this.isAdminUser() || !item.id) {
+      this.errorMessage = 'Invalid directory or insufficient permissions';
+      return;
+    }
+    const newParentIdStr = prompt('Enter new parent directory ID (leave blank for root):');
+    const newParentId = newParentIdStr ? parseInt(newParentIdStr, 10) : undefined;
+    if (newParentIdStr && isNaN(newParentId!)) {
+      this.errorMessage = 'Invalid directory ID';
+      return;
+    }
+    this.isLoading = true;
+    this.dmsService.moveDirectory(item.id as number, newParentId).subscribe({
+      next: () => {
+        this.loadItems();
+      },
+      error: (err) => {
+        this.errorMessage = err.message || 'Failed to move directory';
+        this.isLoading = false;
+      },
+    });
+  }
+
+  updateFile(item: DmsItem) {
+    if (item.type !== 'file' || !this.isModeratorOrAdmin() || !item.id) {
+      this.errorMessage = 'Invalid file or insufficient permissions';
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.onchange = (event: Event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (file) {
+        this.isLoading = true;
+        this.dmsService.updateFile(item.id as string, file).subscribe({
+          next: (response) => {
+            item.name = response.name;
+            this.filteredItems = [...this.items];
+            this.errorMessage = '';
+            this.isLoading = false;
+          },
+          error: (err) => {
+            this.errorMessage = err.message || 'Failed to update file';
+            this.isLoading = false;
+          },
+        });
+      }
+    };
+    input.click();
+  }
+
+  deleteItem(item: DmsItem) {
+    if (!this.isAdminUser() || !item.id) {
+      this.errorMessage = 'Invalid item or insufficient permissions';
+      return;
+    }
+    if (confirm(`Delete ${item.type} "${item.name}"?`)) {
+      this.isLoading = true;
+      const serviceCall = item.type === 'directory'
+        ? this.dmsService.deleteDirectory(item.id as number)
+        : this.dmsService.deleteFile(item.id as string);
+      serviceCall.subscribe({
+        next: () => {
+          this.items = this.items.filter(i => i.id !== item.id);
+          this.filteredItems = [...this.items];
+          this.errorMessage = '';
+          this.isLoading = false;
+        },
+        error: (err) => {
+          this.errorMessage = err.message || `Failed to delete ${item.type}`;
+          this.isLoading = false;
+        },
+      });
+    }
+  }
+
+  downloadFile(item: DmsItem) {
+    if (item.type !== 'file' || !item.id) {
+      this.errorMessage = 'Invalid file';
+      return;
+    }
+    this.isLoading = true;
+    this.dmsService.downloadFile(item.id as string).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = item.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        this.errorMessage = '';
+        this.isLoading = false;
+      },
+      error: (err) => {
+        this.errorMessage = err.message || 'Failed to download file';
+        this.isLoading = false;
+      },
+    });
+  }
+
+  addComment(item: DmsItem) {
+    if (item.type !== 'file' || !item.id) {
+      this.errorMessage = 'Invalid file';
+      return;
+    }
+    const comment = prompt('Add a comment:');
+    if (comment && comment.trim()) {
+      this.isLoading = true;
+      this.dmsService.addComment(item.id as string, comment).subscribe({
+        next: (response) => {
+          item.comments = response.comments || [];
+          this.filteredItems = [...this.items];
+          this.errorMessage = '';
+          this.isLoading = false;
+        },
+        error: (err) => {
+          this.errorMessage = err.message || 'Failed to add comment';
+          this.isLoading = false;
+        },
+      });
+    }
+  }
+
+  searchDocuments() {
+    if (this.searchQuery.trim() === '') {
+      this.filteredItems = [...this.items];
+    } else {
+      this.filteredItems = this.items.filter(item =>
+        item.name.toLowerCase().includes(this.searchQuery.toLowerCase())
+      );
+    }
+  }
+
+  setView(mode: 'grid' | 'list') {
+    this.viewMode = mode;
+  }
+
+  getFileIcon(fileName: string | undefined): string {
+    // Handle undefined or null fileName gracefully
+    if (!fileName) return '📄'; // Default icon
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    switch (extension) {
+      case 'pdf': return '📕';
+      case 'doc': case 'docx': return '📘';
+      case 'xls': case 'xlsx': return '📗';
+      case 'jpg': case 'jpeg': case 'png': case 'gif': return '🖼️';
+      default: return '📄';
+    }
   }
 
   isAdminUser(): boolean {
@@ -277,6 +357,6 @@ export class DmsComponent implements OnInit {
 
   isModeratorOrAdmin(): boolean {
     const user = this.authService.getCurrentUser();
-    return user?.roles?.includes('ROLE_MODERATOR') || user?.roles?.includes('ROLE_ADMIN') || false;
+    return user?.roles?.some(role => ['ROLE_MODERATOR', 'ROLE_ADMIN'].includes(role)) || false;
   }
 }

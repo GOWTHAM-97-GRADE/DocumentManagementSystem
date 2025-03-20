@@ -1,49 +1,80 @@
 .admin-container {
-  padding: 20px;
-  font-family: Arial, sans-serif;
+  padding: 30px;
+  font-family: 'Arial', sans-serif;
+  max-width: 1200px;
+  margin: 0 auto;
+  background: linear-gradient(135deg, #f9fafb 0%, #e9ecef 100%);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 h2 {
-  margin-bottom: 20px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 25px;
+  text-align: center;
 }
 
 .toolbar {
+  display: flex;
+  justify-content: flex-end;
   margin-bottom: 20px;
 }
 
 .toolbar button {
-  padding: 8px 16px;
-  background-color: #d32f2f;
+  padding: 10px 20px;
+  background: linear-gradient(90deg, #d32f2f, #ef4444);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
 }
 
 .toolbar button:hover {
-  background-color: #b71c1c;
+  background: linear-gradient(90deg, #b71c1c, #dc2626);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(211, 47, 47, 0.4);
 }
 
 .error {
-  color: red;
-  margin-bottom: 10px;
+  color: #ef4444;
+  background-color: #fee2e2;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  text-align: center;
+  font-weight: 500;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  background-color: #fff;
+  background-color: #ffffff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 th, td {
-  border: 1px solid #ddd;
-  padding: 12px;
+  padding: 14px 16px;
   text-align: left;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 th {
-  background-color: #f5f5f5;
-  font-weight: bold;
+  background-color: #f4f4f5;
+  color: #374151;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+td {
+  color: #4b5563;
+  font-size: 14px;
 }
 
 tr:nth-child(even) {
@@ -52,17 +83,49 @@ tr:nth-child(even) {
 
 tr:hover {
   background-color: #f1f1f1;
+  transition: background-color 0.2s ease;
 }
 
 button {
-  padding: 6px 12px;
-  background-color: #d32f2f;
+  padding: 8px 16px;
+  background: linear-gradient(90deg, #d32f2f, #ef4444);
   color: white;
   border: none;
-  border-radius: 3px;
+  border-radius: 4px;
   cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
 }
 
 button:hover {
-  background-color: #b71c1c;
+  background: linear-gradient(90deg, #b71c1c, #dc2626);
+  transform: scale(1.05);
+}
+
+.no-users {
+  text-align: center;
+  padding: 30px;
+  color: #6b7280;
+  font-size: 16px;
+  font-style: italic;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .admin-container {
+    padding: 15px;
+  }
+
+  table {
+    font-size: 12px;
+  }
+
+  th, td {
+    padding: 10px;
+  }
+
+  .toolbar button, button {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
 }

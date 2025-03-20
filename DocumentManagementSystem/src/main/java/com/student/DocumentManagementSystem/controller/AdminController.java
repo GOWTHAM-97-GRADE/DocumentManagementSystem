@@ -31,8 +31,12 @@ public class AdminController {
         if (!confirm) {
             return ResponseEntity.badRequest().body(new MessageResponse("Operation requires confirmation."));
         }
-        userRepository.deleteAll();
-        return ResponseEntity.ok(new MessageResponse("All users have been deleted successfully."));
+        try {
+            userRepository.deleteAll();
+            return ResponseEntity.ok(new MessageResponse("All users have been deleted successfully."));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new MessageResponse("Failed to delete all users: " + e.getMessage()));
+        }
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -40,8 +44,12 @@ public class AdminController {
     public ResponseEntity<?> deleteUserById(@PathVariable Long id) {
         Optional<User> user = userRepository.findById(id);
         if (user.isPresent()) {
-            userRepository.deleteById(id);
-            return ResponseEntity.ok(new MessageResponse("User with ID " + id + " has been deleted successfully."));
+            try {
+                userRepository.deleteById(id);
+                return ResponseEntity.ok(new MessageResponse("User with ID " + id + " has been deleted successfully."));
+            } catch (Exception e) {
+                return ResponseEntity.status(500).body(new MessageResponse("Failed to delete user with ID " + id + ": " + e.getMessage()));
+            }
         } else {
             return ResponseEntity.badRequest().body(new MessageResponse("User with ID " + id + " not found."));
         }
@@ -50,13 +58,19 @@ public class AdminController {
     @GetMapping("/users")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<UserResponse>> getAllUsers() {
-        List<User> users = userRepository.findAll();
-        List<UserResponse> userResponses = users.stream().map(user -> {
-            Set<String> roleNames = user.getRoles().stream()
-                    .map(role -> role.getName().name()) // Convert ERole to String (e.g., "ROLE_ADMIN")
-                    .collect(Collectors.toSet());
-            return new UserResponse(user.getId(), user.getUsername(), user.getEmail(), user.isEnabled(), roleNames);
-        }).collect(Collectors.toList());
-        return ResponseEntity.ok(userResponses);
+        try {
+            List<User> users = userRepository.findAll();  // With fixed EntityGraph
+            List<UserResponse> userResponses = users.stream().map(user -> {
+                Set<String> roleNames = user.getRoles().stream()
+                        .map(role -> role.getName().name())
+                        .collect(Collectors.toSet());
+                return new UserResponse(user.getId(), user.getUsername(), user.getEmail(), user.isEnabled(), roleNames);
+            }).collect(Collectors.toList());
+
+            return ResponseEntity.ok(userResponses);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to retrieve users: " + e.getMessage(), e);
+        }
     }
+
 }

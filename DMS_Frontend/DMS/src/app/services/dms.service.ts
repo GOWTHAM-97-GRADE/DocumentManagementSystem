@@ -4,41 +4,40 @@ import { Observable, throwError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { AuthService } from './auth.service';
 
-// Interfaces aligned with backend payloads
-interface UserResponse {
+export interface UserResponse {
   id: number;
   username: string;
   email: string;
-  enabled: number;
-  roles: string[]; // JSON serializes Set<String> as an array
+  enabled: boolean;
+  roles: string[];
 }
 
-interface DirectoryResponse {
+export interface DirectoryResponse {
   id: number;
   name: string;
   parentId?: number;
   path?: string;
 }
 
-interface FileResponse {
-  id: string; // UUID in backend
+export interface FileResponse {
+  id: string; // UUID
   name: string;
   directoryId: number;
   relativePath?: string;
   comments?: string[];
 }
 
-interface DirectoryContentResponse {
+export interface DirectoryContentResponse {
   subdirectories: DirectoryResponse[];
   files: FileResponse[];
 }
 
-interface CreateDirectoryRequest {
+export interface CreateDirectoryRequest {
   name: string;
   parentId?: number;
 }
 
-interface RenameDirectoryRequest {
+export interface RenameDirectoryRequest {
   name: string;
 }
 
@@ -46,29 +45,19 @@ interface RenameDirectoryRequest {
   providedIn: 'root'
 })
 export class DmsService {
-  private apiUrl = 'http://localhost:8080/api';
+  private apiUrl = 'http://localhost:8080/api'; // Adjust as needed
 
   constructor(private http: HttpClient, private authService: AuthService) {}
 
-  private getHeaders(includeContentType: boolean = true): HttpHeaders {
+  private getHeaders(contentType: string = 'application/json'): HttpHeaders {
     const token = this.authService.getToken();
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-    let headers = new HttpHeaders({
-      Authorization: `Bearer ${token}`
+    if (!token) throw new Error('No authentication token found');
+    return new HttpHeaders({
+      Authorization: `Bearer ${token}`,
+      'Content-Type': contentType,
     });
-    if (includeContentType) {
-      headers = headers.set('Content-Type', 'application/json');
-    }
-    return headers;
   }
 
-  getCurrentUsername(): string | undefined {
-    return this.authService.getCurrentUser()?.username;
-  }
-
-  // Directory Management
   getAllDirectories(): Observable<DirectoryResponse[]> {
     return this.http.get<DirectoryResponse[]>(`${this.apiUrl}/directories`, { headers: this.getHeaders() })
       .pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to load directories'))));
@@ -85,7 +74,8 @@ export class DmsService {
   }
 
   getDirectoryContents(directoryId: number): Observable<DirectoryContentResponse> {
-    return this.http.get<DirectoryContentResponse>(`${this.apiUrl}/directories/${directoryId}/contents`, { headers: this.getHeaders() })
+    const url = directoryId === 0 ? `${this.apiUrl}/directories` : `${this.apiUrl}/directories/${directoryId}/contents`;
+    return this.http.get<DirectoryContentResponse>(url, { headers: this.getHeaders() })
       .pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to load directory contents'))));
   }
 
@@ -105,16 +95,13 @@ export class DmsService {
       .pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to move directory'))));
   }
 
-  // File Management
   uploadFiles(directoryId: number, files: File[], username: string, relativePaths?: string[]): Observable<FileResponse[]> {
     const formData = new FormData();
     formData.append('directoryId', directoryId.toString());
-    files.forEach(file => formData.append('file', file));
     formData.append('username', username);
-    if (relativePaths) {
-      relativePaths.forEach(path => formData.append('relativePath', path));
-    }
-    const headers = this.getHeaders(false); // No Content-Type for multipart
+    files.forEach(file => formData.append('file', file));
+    if (relativePaths) relativePaths.forEach(path => formData.append('relativePath', path));
+    const headers = new HttpHeaders({ Authorization: `Bearer ${this.authService.getToken()}` });
     return this.http.post<FileResponse[]>(`${this.apiUrl}/files/upload`, formData, { headers })
       .pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to upload files'))));
   }
@@ -127,7 +114,7 @@ export class DmsService {
   updateFile(fileId: string, file: File): Observable<FileResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    const headers = this.getHeaders(false); // No Content-Type for multipart
+    const headers = new HttpHeaders({ Authorization: `Bearer ${this.authService.getToken()}` });
     return this.http.put<FileResponse>(`${this.apiUrl}/files/${fileId}/update`, formData, { headers })
       .pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to update file'))));
   }
@@ -138,22 +125,18 @@ export class DmsService {
   }
 
   addComment(fileId: string, comment: string): Observable<FileResponse> {
-    return this.http.post<FileResponse>(
-      `${this.apiUrl}/files/${fileId}/comments`,
-      { comment },
-      { headers: this.getHeaders() }
-    ).pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to add comment'))));
+    return this.http.post<FileResponse>(`${this.apiUrl}/files/${fileId}/comments`, { comment }, { headers: this.getHeaders() })
+      .pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to add comment'))));
   }
 
-  // Hypothetical download endpoint (to be implemented in backend)
+  // Note: Backend doesn't provide download endpoint; this assumes a hypothetical one
   downloadFile(fileId: string): Observable<Blob> {
-    return this.http.get(`${this.apiUrl}/files/${fileId}/download`, {
-      headers: this.getHeaders(false),
+    return this.http.get(`${this.apiUrl}/files/${fileId}`, {
+      headers: this.getHeaders('application/octet-stream'),
       responseType: 'blob'
     }).pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to download file'))));
   }
 
-  // User Management
   getAllUsers(): Observable<UserResponse[]> {
     return this.http.get<UserResponse[]>(`${this.apiUrl}/admin/users`, { headers: this.getHeaders() })
       .pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to load users'))));
@@ -165,10 +148,7 @@ export class DmsService {
   }
 
   deleteAllUsers(confirm: boolean): Observable<void> {
-    if (!confirm) {
-      return throwError(() => new Error('Operation requires confirmation'));
-    }
-    const params = new HttpParams().set('confirm', 'true');
+    const params = new HttpParams().set('confirm', confirm.toString());
     return this.http.delete<void>(`${this.apiUrl}/admin/delete-all-users`, { headers: this.getHeaders(), params })
       .pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to delete all users'))));
   }

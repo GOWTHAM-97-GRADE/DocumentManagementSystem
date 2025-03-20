@@ -20,10 +20,11 @@
         <td>{{ user.id }}</td>
         <td>{{ user.username }}</td>
         <td>{{ user.email }}</td>
-        <td>{{ user.enabled === 1 ? 'Yes' : 'No' }}</td>
+        <td>{{ isUserEnabled(user.enabled) }}</td> <!-- Use helper method -->
         <td>{{ user.roles.join(', ') }}</td>
         <td><button (click)="deleteUser(user.id)">Delete</button></td>
       </tr>
     </tbody>
   </table>
+  <div class="no-users" *ngIf="users.length === 0 && !errorMessage">No users found.</div>
 </div>
