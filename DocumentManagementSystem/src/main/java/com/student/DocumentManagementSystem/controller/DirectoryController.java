@@ -29,6 +29,7 @@ public class DirectoryController {
     @PostMapping
     @PreAuthorize("hasRole('ADMIN') or hasRole('MODERATOR')")
     public ResponseEntity<DirectoryResponse> createDirectory(@RequestBody CreateDirectoryRequest request, Authentication authentication) {
+        // If parentId is null, it will be set to 0 in the service layer to indicate the root directory
         return ResponseEntity.ok(directoryService.createDirectory(request, authentication.getName()));
     }
 
@@ -60,6 +61,7 @@ public class DirectoryController {
     @PutMapping("/{id}/move")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DirectoryResponse> moveDirectory(@PathVariable Long id, @RequestParam(required = false) Long newParentId) {
+        // If newParentId is null, it will be set to 0 in the service layer to move to the root
         return ResponseEntity.ok(directoryService.moveDirectory(id, newParentId));
     }
 

@@ -4,6 +4,7 @@ import { Observable, throwError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { AuthService } from './auth.service';
 
+// Updated interfaces to match backend responses
 export interface UserResponse {
   id: number;
   username: string;
@@ -15,16 +16,19 @@ export interface UserResponse {
 export interface DirectoryResponse {
   id: number;
   name: string;
-  parentId?: number;
-  path?: string;
+  path: string; // Added from backend
+  createdBy: string; // Added from backend
 }
 
 export interface FileResponse {
   id: string; // UUID
   name: string;
-  directoryId: number;
-  relativePath?: string;
-  comments?: string[];
+  fileType: string; // From backend FileResponse
+  fileSize: number; // From backend FileResponse
+  fileData?: string; // Base64 encoded data (optional, used in getFile)
+  uploadDate?: string; // From backend
+  uploadedBy?: string; // From backend
+  comments?: string[]; // From backend
 }
 
 export interface DirectoryContentResponse {
@@ -38,7 +42,7 @@ export interface CreateDirectoryRequest {
 }
 
 export interface RenameDirectoryRequest {
-  name: string;
+  newName: string; // Match backend RenameDirectoryRequest
 }
 
 @Injectable({
@@ -51,7 +55,10 @@ export class DmsService {
 
   private getHeaders(contentType: string = 'application/json'): HttpHeaders {
     const token = this.authService.getToken();
-    if (!token) throw new Error('No authentication token found');
+    if (!token) {
+      console.error('No authentication token found');
+      throw new Error('No authentication token found');
+    }
     return new HttpHeaders({
       Authorization: `Bearer ${token}`,
       'Content-Type': contentType,
@@ -74,7 +81,7 @@ export class DmsService {
   }
 
   getDirectoryContents(directoryId: number): Observable<DirectoryContentResponse> {
-    const url = directoryId === 0 ? `${this.apiUrl}/directories` : `${this.apiUrl}/directories/${directoryId}/contents`;
+    const url = `${this.apiUrl}/directories/${directoryId}/contents`;
     return this.http.get<DirectoryContentResponse>(url, { headers: this.getHeaders() })
       .pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to load directory contents'))));
   }
@@ -99,8 +106,12 @@ export class DmsService {
     const formData = new FormData();
     formData.append('directoryId', directoryId.toString());
     formData.append('username', username);
-    files.forEach(file => formData.append('file', file));
-    if (relativePaths) relativePaths.forEach(path => formData.append('relativePath', path));
+    files.forEach((file, index) => {
+      formData.append('file', file);
+      if (relativePaths && relativePaths[index]) {
+        formData.append('relativePath', relativePaths[index]);
+      }
+    });
     const headers = new HttpHeaders({ Authorization: `Bearer ${this.authService.getToken()}` });
     return this.http.post<FileResponse[]>(`${this.apiUrl}/files/upload`, formData, { headers })
       .pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to upload files'))));
@@ -129,7 +140,6 @@ export class DmsService {
       .pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to add comment'))));
   }
 
-  // Note: Backend doesn't provide download endpoint; this assumes a hypothetical one
   downloadFile(fileId: string): Observable<Blob> {
     return this.http.get(`${this.apiUrl}/files/${fileId}`, {
       headers: this.getHeaders('application/octet-stream'),
@@ -137,6 +147,7 @@ export class DmsService {
     }).pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to download file'))));
   }
 
+  // Admin methods remain unchanged
   getAllUsers(): Observable<UserResponse[]> {
     return this.http.get<UserResponse[]>(`${this.apiUrl}/admin/users`, { headers: this.getHeaders() })
       .pipe(catchError(err => throwError(() => new Error(err.error?.message || 'Failed to load users'))));

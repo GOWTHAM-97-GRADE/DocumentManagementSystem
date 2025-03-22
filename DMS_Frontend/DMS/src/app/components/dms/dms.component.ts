@@ -9,6 +9,10 @@ interface DmsItem {
   type: 'directory' | 'file';
   id: number | string; // number for directories, string (UUID) for files
   name: string;
+  fileType?: string; // Added for files
+  fileSize?: number; // Added for files
+  uploadedBy?: string; // Added for files
+  uploadDate?: string; // Added for files
   comments?: string[];
 }
 
@@ -23,9 +27,9 @@ export class DmsComponent implements OnInit {
   isDarkTheme: boolean = false;
   items: DmsItem[] = [];
   filteredItems: DmsItem[] = [];
-  currentDirectory: number | null = null; // null for root as per backend
+  currentDirectory: number = 1; // Root directory is 1
   currentPath: string[] = ['Home'];
-  currentPathIds: (number | null)[] = [null];
+  currentPathIds: number[] = [1];
   errorMessage: string = '';
   selectedFiles: File[] = [];
   isLoading: boolean = false;
@@ -41,14 +45,18 @@ export class DmsComponent implements OnInit {
   ngOnInit() {
     const savedTheme = localStorage.getItem('isDarkTheme');
     this.isDarkTheme = savedTheme === 'true';
+    if (!this.authService.getToken()) {
+      this.errorMessage = 'Please log in to access the Document Management System';
+      this.router.navigate(['/login']);
+      return;
+    }
     this.loadItems();
   }
 
   loadItems() {
     this.isLoading = true;
-    this.dmsService.getDirectoryContents(this.currentDirectory ?? 0).subscribe({
+    this.dmsService.getDirectoryContents(this.currentDirectory).subscribe({
       next: (response: DirectoryContentResponse) => {
-        // Ensure response and its properties are valid before mapping
         if (response && Array.isArray(response.subdirectories) && Array.isArray(response.files)) {
           this.items = [
             ...response.subdirectories.map(dir => ({
@@ -60,6 +68,10 @@ export class DmsComponent implements OnInit {
               type: 'file' as const,
               id: file.id,
               name: file.name,
+              fileType: file.fileType,
+              fileSize: file.fileSize,
+              uploadedBy: file.uploadedBy,
+              uploadDate: file.uploadDate,
               comments: file.comments || [],
             })),
           ];
@@ -72,6 +84,9 @@ export class DmsComponent implements OnInit {
       },
       error: (err) => {
         this.errorMessage = err.message || 'Failed to load items';
+        if (err.message.includes('No authentication token found')) {
+          this.router.navigate(['/login']);
+        }
         this.isLoading = false;
       },
     });
@@ -117,7 +132,7 @@ export class DmsComponent implements OnInit {
       this.isLoading = true;
       const request: CreateDirectoryRequest = {
         name: name.trim(),
-        parentId: this.currentDirectory ?? undefined,
+        parentId: this.currentDirectory,
       };
       this.dmsService.createDirectory(request).subscribe({
         next: (response) => {
@@ -145,10 +160,9 @@ export class DmsComponent implements OnInit {
   uploadFiles() {
     if (this.selectedFiles.length > 0) {
       this.isLoading = true;
-      const directoryId = this.currentDirectory ?? 0;
+      const directoryId = this.currentDirectory;
       const username = this.authService.getCurrentUser()?.username || 'anonymous';
 
-      // Capture original file names for reliability
       const originalFileNames = this.selectedFiles.map(file => file.name);
 
       this.dmsService.uploadFiles(directoryId, this.selectedFiles, username).subscribe({
@@ -158,7 +172,11 @@ export class DmsComponent implements OnInit {
             this.items.push({
               type: 'file',
               id: response.id,
-              name: response.name || originalName, // Fallback to original name if API doesn't provide it
+              name: response.name || originalName,
+              fileType: response.fileType,
+              fileSize: response.fileSize,
+              uploadedBy: response.uploadedBy,
+              uploadDate: response.uploadDate,
               comments: response.comments || [],
             });
           });
@@ -183,7 +201,7 @@ export class DmsComponent implements OnInit {
     const newName = prompt('Enter new name:', item.name);
     if (newName && newName.trim()) {
       this.isLoading = true;
-      this.dmsService.renameDirectory(item.id as number, { name: newName }).subscribe({
+      this.dmsService.renameDirectory(item.id as number, { newName: newName.trim() }).subscribe({
         next: (response) => {
           item.name = response.name;
           this.filteredItems = [...this.items];
@@ -204,8 +222,8 @@ export class DmsComponent implements OnInit {
       return;
     }
     const newParentIdStr = prompt('Enter new parent directory ID (leave blank for root):');
-    const newParentId = newParentIdStr ? parseInt(newParentIdStr, 10) : undefined;
-    if (newParentIdStr && isNaN(newParentId!)) {
+    const newParentId = newParentIdStr ? parseInt(newParentIdStr, 10) : 1;
+    if (newParentIdStr && isNaN(newParentId)) {
       this.errorMessage = 'Invalid directory ID';
       return;
     }
@@ -235,6 +253,8 @@ export class DmsComponent implements OnInit {
         this.dmsService.updateFile(item.id as string, file).subscribe({
           next: (response) => {
             item.name = response.name;
+            item.fileType = response.fileType;
+            item.fileSize = response.fileSize;
             this.filteredItems = [...this.items];
             this.errorMessage = '';
             this.isLoading = false;
@@ -338,8 +358,7 @@ export class DmsComponent implements OnInit {
   }
 
   getFileIcon(fileName: string | undefined): string {
-    // Handle undefined or null fileName gracefully
-    if (!fileName) return '📄'; // Default icon
+    if (!fileName) return '📄';
     const extension = fileName.split('.').pop()?.toLowerCase();
     switch (extension) {
       case 'pdf': return '📕';

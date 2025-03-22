@@ -12,13 +12,7 @@ export const routes: Routes = [
   { path: 'login', component: LoginComponent },
   { path: 'signup', component: SignupComponent },
   { path: 'forgot-password', component: ForgotPasswordComponent },
-  {
-    path: 'dms',
-    component: DmsComponent,
-    canActivate: [AuthGuard],
-    children: [
-      { path: 'admin', component: AdminComponent }
-    ]
-  },
+  { path: 'dms', component: DmsComponent, canActivate: [AuthGuard] },
+  { path: 'admin', component: AdminComponent, canActivate: [AuthGuard] },
   { path: '**', redirectTo: '', pathMatch: 'full' }
 ];
