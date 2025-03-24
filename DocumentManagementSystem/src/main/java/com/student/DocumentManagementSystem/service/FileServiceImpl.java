@@ -10,6 +10,7 @@ import com.student.DocumentManagementSystem.payload.response.FileResponse;
 import com.student.DocumentManagementSystem.repository.DirectoryRepository;
 import com.student.DocumentManagementSystem.repository.FileRepository;
 import com.student.DocumentManagementSystem.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -27,11 +28,14 @@ public class FileServiceImpl implements FileService {
     private final FileRepository fileRepository;
     private final DirectoryRepository directoryRepository;
     private final UserRepository userRepository;
+    private final AuditLogService auditLogService;
 
-    public FileServiceImpl(FileRepository fileRepository, DirectoryRepository directoryRepository, UserRepository userRepository) {
+    @Autowired
+    public FileServiceImpl(FileRepository fileRepository, DirectoryRepository directoryRepository, UserRepository userRepository, AuditLogService auditLogService) {
         this.fileRepository = fileRepository;
         this.directoryRepository = directoryRepository;
         this.userRepository = userRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Override
@@ -41,10 +45,9 @@ public class FileServiceImpl implements FileService {
 
     @Override
     public FileResponse uploadFile(Long directoryId, MultipartFile file, String username, String relativePath) {
-        Directory targetDirectory = getOrCreateDirectory(directoryId, relativePath);
-
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        Directory targetDirectory = getOrCreateDirectory(directoryId, relativePath);
 
         fileRepository.findByFileNameAndFileSizeAndDirectory(file.getOriginalFilename(), file.getSize(), targetDirectory)
                 .ifPresent(existing -> {
@@ -66,6 +69,8 @@ public class FileServiceImpl implements FileService {
         }
 
         fileRepository.save(fileEntity);
+
+        auditLogService.log("CREATE", "FILE", fileEntity.getFileId().toString(), user.getId(), username, "Uploaded file: " + fileEntity.getFileName());
 
         return new FileResponse(
                 fileEntity.getFileId(),
@@ -90,6 +95,8 @@ public class FileServiceImpl implements FileService {
         file.getComments().add(user.getUsername() + ": " + comment + " (" + LocalDateTime.now() + ")");
         fileRepository.save(file);
 
+        auditLogService.log("COMMENT", "FILE", fileId.toString(), user.getId(), username, "Added comment: " + comment);
+
         return new FileResponse(
                 file.getFileId(),
                 file.getFileName(),
@@ -111,7 +118,7 @@ public class FileServiceImpl implements FileService {
                 file.getFileName(),
                 file.getFileType(),
                 file.getFileSize(),
-                java.util.Base64.getEncoder().encodeToString(file.getFileData()), // Encode to Base64
+                java.util.Base64.getEncoder().encodeToString(file.getFileData()),
                 file.getUploadDate(),
                 file.getUploadedBy().getUsername(),
                 file.getComments()
@@ -119,10 +126,11 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
-    public FileResponse updateFile(UUID fileId, MultipartFile file) {
+    public FileResponse updateFile(UUID fileId, MultipartFile file, Long userId, String username) {
         FileEntity existingFile = fileRepository.findById(fileId)
                 .orElseThrow(() -> new FileNotFoundException("File not found"));
 
+        String oldName = existingFile.getFileName();
         existingFile.setFileName(file.getOriginalFilename());
         existingFile.setFileType(file.getContentType());
         existingFile.setFileSize(file.getSize());
@@ -135,20 +143,28 @@ public class FileServiceImpl implements FileService {
         }
 
         fileRepository.save(existingFile);
+
+        auditLogService.log("UPDATE", "FILE", fileId.toString(), userId, username, "Updated file from " + oldName + " to " + existingFile.getFileName());
+
         return new FileResponse(
                 existingFile.getFileId(),
                 existingFile.getFileName(),
                 existingFile.getFileType(),
-                existingFile.getFileSize()
+                existingFile.getFileSize(),
+                java.util.Base64.getEncoder().encodeToString(existingFile.getFileData()),
+                existingFile.getUploadDate(),
+                existingFile.getUploadedBy().getUsername(),
+                existingFile.getComments()
         );
     }
 
     @Override
-    public void deleteFile(UUID fileId) {
-        if (!fileRepository.existsById(fileId)) {
-            throw new FileNotFoundException("File not found");
-        }
+    public void deleteFile(UUID fileId, Long userId, String username) {
+        FileEntity file = fileRepository.findById(fileId)
+                .orElseThrow(() -> new FileNotFoundException("File not found"));
         fileRepository.deleteById(fileId);
+
+        auditLogService.log("DELETE", "FILE", fileId.toString(), userId, username, "Deleted file: " + file.getFileName());
     }
 
     @Override
@@ -175,8 +191,8 @@ public class FileServiceImpl implements FileService {
             return currentDirectory;
         }
 
-        String[] pathParts = relativePath.split("/|\\\\"); // Handle both / and \ separators
-        for (int i = 0; i < pathParts.length - 1; i++) { // Skip the last part (file name)
+        String[] pathParts = relativePath.split("/|\\\\");
+        for (int i = 0; i < pathParts.length - 1; i++) {
             String dirName = pathParts[i];
             if (dirName.isEmpty()) continue;
 
@@ -186,9 +202,9 @@ public class FileServiceImpl implements FileService {
             } else {
                 Directory newDir = new Directory();
                 newDir.setName(dirName);
-                newDir.setParent(currentDirectory); // Set parent as Directory entity
+                newDir.setParent(currentDirectory);
                 newDir.setPath((currentDirectory.getPath() != null ? currentDirectory.getPath() : "") + "/" + dirName);
-                newDir.setCreatedBy(currentDirectory.getCreatedBy()); // Inherit creator (adjust as needed)
+                newDir.setCreatedBy(currentDirectory.getCreatedBy());
                 newDir.setCreatedAt(LocalDateTime.now());
                 newDir.setUpdatedAt(LocalDateTime.now());
                 currentDirectory = directoryRepository.save(newDir);

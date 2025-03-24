@@ -5,6 +5,7 @@ import com.student.DocumentManagementSystem.payload.request.RenameDirectoryReque
 import com.student.DocumentManagementSystem.payload.response.DirectoryContentResponse;
 import com.student.DocumentManagementSystem.payload.response.DirectoryResponse;
 import com.student.DocumentManagementSystem.payload.response.FileResponse;
+import com.student.DocumentManagementSystem.security.services.UserDetailsImpl;
 import com.student.DocumentManagementSystem.service.DirectoryService;
 import com.student.DocumentManagementSystem.service.FileService;
 import org.springframework.http.ResponseEntity;
@@ -29,20 +30,25 @@ public class DirectoryController {
     @PostMapping
     @PreAuthorize("hasRole('ADMIN') or hasRole('MODERATOR')")
     public ResponseEntity<DirectoryResponse> createDirectory(@RequestBody CreateDirectoryRequest request, Authentication authentication) {
-        // If parentId is null, it will be set to 0 in the service layer to indicate the root directory
         return ResponseEntity.ok(directoryService.createDirectory(request, authentication.getName()));
     }
 
     @PutMapping("/{id}/rename")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<DirectoryResponse> renameDirectory(@PathVariable Long id, @RequestBody RenameDirectoryRequest request) {
-        return ResponseEntity.ok(directoryService.renameDirectory(id, request));
+    public ResponseEntity<DirectoryResponse> renameDirectory(@PathVariable Long id, @RequestBody RenameDirectoryRequest request, Authentication authentication) {
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        Long userId = userDetails.getId();
+        String username = userDetails.getUsername();
+        return ResponseEntity.ok(directoryService.renameDirectory(id, request, userId, username));
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> deleteDirectory(@PathVariable Long id) {
-        directoryService.deleteDirectory(id);
+    public ResponseEntity<Void> deleteDirectory(@PathVariable Long id, Authentication authentication) {
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        Long userId = userDetails.getId();
+        String username = userDetails.getUsername();
+        directoryService.deleteDirectory(id, userId, username);
         return ResponseEntity.noContent().build();
     }
 
@@ -60,9 +66,11 @@ public class DirectoryController {
 
     @PutMapping("/{id}/move")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<DirectoryResponse> moveDirectory(@PathVariable Long id, @RequestParam(required = false) Long newParentId) {
-        // If newParentId is null, it will be set to 0 in the service layer to move to the root
-        return ResponseEntity.ok(directoryService.moveDirectory(id, newParentId));
+    public ResponseEntity<DirectoryResponse> moveDirectory(@PathVariable Long id, @RequestParam(required = false) Long newParentId, Authentication authentication) {
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        Long userId = userDetails.getId();
+        String username = userDetails.getUsername();
+        return ResponseEntity.ok(directoryService.moveDirectory(id, newParentId, userId, username));
     }
 
     @GetMapping("/{id}")

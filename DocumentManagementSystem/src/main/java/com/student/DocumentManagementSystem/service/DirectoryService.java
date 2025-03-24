@@ -8,10 +8,10 @@ import java.util.List;
 
 public interface DirectoryService {
     DirectoryResponse createDirectory(CreateDirectoryRequest request, String username);
-    DirectoryResponse renameDirectory(Long id, RenameDirectoryRequest request);
-    void deleteDirectory(Long id);
+    DirectoryResponse renameDirectory(Long id, RenameDirectoryRequest request, Long userId, String username);
+    void deleteDirectory(Long id, Long userId, String username);
     List<DirectoryResponse> getAllDirectories();
     List<DirectoryResponse> getSubdirectories(Long parentId);
-    DirectoryResponse moveDirectory(Long id, Long newParentId);
+    DirectoryResponse moveDirectory(Long id, Long newParentId, Long userId, String username);
     DirectoryResponse getDirectory(Long id);
 }

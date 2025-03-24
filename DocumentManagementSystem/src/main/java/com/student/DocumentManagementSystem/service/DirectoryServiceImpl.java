@@ -10,6 +10,7 @@ import com.student.DocumentManagementSystem.payload.response.DirectoryResponse;
 import com.student.DocumentManagementSystem.repository.DirectoryRepository;
 import com.student.DocumentManagementSystem.repository.UserRepository;
 import org.hibernate.Hibernate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,28 +24,29 @@ import java.util.stream.Collectors;
 public class DirectoryServiceImpl implements DirectoryService {
     private final DirectoryRepository directoryRepository;
     private final UserRepository userRepository;
+    private final AuditLogService auditLogService;
 
     private static final Long ROOT_DIRECTORY_ID = 1L;
     private static final String SYSTEM_USERNAME = "system";
 
-    public DirectoryServiceImpl(DirectoryRepository directoryRepository, UserRepository userRepository) {
+    @Autowired
+    public DirectoryServiceImpl(DirectoryRepository directoryRepository, UserRepository userRepository, AuditLogService auditLogService) {
         this.directoryRepository = directoryRepository;
         this.userRepository = userRepository;
+        this.auditLogService = auditLogService;
     }
 
     @PostConstruct
     @Transactional
     public void initRootDirectory() {
         if (directoryRepository.findById(ROOT_DIRECTORY_ID).isEmpty()) {
-            // Ensure a system user exists
             User systemUser = userRepository.findByUsername(SYSTEM_USERNAME)
                     .orElseGet(() -> {
                         User newUser = new User();
                         newUser.setUsername(SYSTEM_USERNAME);
                         newUser.setEmail("system@domain.com");
-                        newUser.setPassword("defaultPassword"); // Set a secure default or encode it
+                        newUser.setPassword("defaultPassword");
                         newUser.setEnabled(1);
-                        // Add roles or other required fields as per your User model
                         return userRepository.save(newUser);
                     });
 
@@ -54,9 +56,11 @@ public class DirectoryServiceImpl implements DirectoryService {
             root.setCreatedAt(LocalDateTime.now());
             root.setUpdatedAt(LocalDateTime.now());
             root.setCreatedBy(systemUser);
-            root.setParent(null); // Root has no parent
+            root.setParent(null);
             root.updatePath();
             directoryRepository.save(root);
+
+            auditLogService.log("CREATE", "DIRECTORY", ROOT_DIRECTORY_ID.toString(), systemUser.getId(), SYSTEM_USERNAME, "Initialized root directory");
         }
     }
 
@@ -84,12 +88,15 @@ public class DirectoryServiceImpl implements DirectoryService {
 
         parent.addSubdirectory(directory);
         directoryRepository.save(directory);
+
+        auditLogService.log("CREATE", "DIRECTORY", directory.getId().toString(), user.getId(), username, "Created directory: " + directory.getName());
+
         return mapToResponse(directory);
     }
 
     @Override
     @Transactional
-    public DirectoryResponse renameDirectory(Long id, RenameDirectoryRequest request) {
+    public DirectoryResponse renameDirectory(Long id, RenameDirectoryRequest request, Long userId, String username) {
         Directory directory = directoryRepository.findById(id)
                 .orElseThrow(() -> new DirectoryNotFoundException("Directory not found: " + id));
 
@@ -104,17 +111,21 @@ public class DirectoryServiceImpl implements DirectoryService {
             throw new DirectoryAlreadyExistsException("Directory '" + newName + "' already exists under parent ID " + (parent != null ? parent.getId() : ROOT_DIRECTORY_ID));
         }
 
+        String oldName = directory.getName();
         directory.setName(newName);
         directory.setUpdatedAt(LocalDateTime.now());
         directory.updatePath();
 
         directoryRepository.save(directory);
+
+        auditLogService.log("RENAME", "DIRECTORY", id.toString(), userId, username, "Renamed from " + oldName + " to " + newName);
+
         return mapToResponse(directory);
     }
 
     @Override
     @Transactional
-    public void deleteDirectory(Long id) {
+    public void deleteDirectory(Long id, Long userId, String username) {
         Directory directory = directoryRepository.findById(id)
                 .orElseThrow(() -> new DirectoryNotFoundException("Directory not found: " + id));
 
@@ -128,6 +139,8 @@ public class DirectoryServiceImpl implements DirectoryService {
             directoryRepository.save(parent);
         }
         directoryRepository.delete(directory);
+
+        auditLogService.log("DELETE", "DIRECTORY", id.toString(), userId, username, "Deleted directory: " + directory.getName());
     }
 
     @Override
@@ -153,7 +166,7 @@ public class DirectoryServiceImpl implements DirectoryService {
 
     @Override
     @Transactional
-    public DirectoryResponse moveDirectory(Long id, Long newParentId) {
+    public DirectoryResponse moveDirectory(Long id, Long newParentId, Long userId, String username) {
         Directory directory = directoryRepository.findById(id)
                 .orElseThrow(() -> new DirectoryNotFoundException("Directory not found: " + id));
 
@@ -173,6 +186,7 @@ public class DirectoryServiceImpl implements DirectoryService {
             throw new DirectoryAlreadyExistsException("Directory '" + directory.getName() + "' already exists under parent ID " + effectiveNewParentId);
         }
 
+        String oldParentIdStr = oldParent != null ? oldParent.getId().toString() : "root";
         if (oldParent != null) {
             oldParent.removeSubdirectory(directory);
             directoryRepository.save(oldParent);
@@ -184,6 +198,10 @@ public class DirectoryServiceImpl implements DirectoryService {
 
         directoryRepository.save(directory);
         directoryRepository.save(newParent);
+
+        String newParentIdStr = newParentId != null ? newParentId.toString() : "root";
+        auditLogService.log("MOVE", "DIRECTORY", id.toString(), userId, username, "Moved from parent " + oldParentIdStr + " to " + newParentIdStr);
+
         return mapToResponse(directory);
     }
 
