@@ -64,39 +64,64 @@ public class FileController {
     @PreAuthorize("hasAnyRole('USER', 'MODERATOR', 'ADMIN')")
     @GetMapping("/{id}")
     public ResponseEntity<FileResponse> getFile(@PathVariable UUID id) {
-        FileResponse file = fileService.getFile(id);
-        return ResponseEntity.ok(file);
+        try {
+            FileResponse file = fileService.getFile(id);
+            return ResponseEntity.ok(file);
+        } catch (Exception e) {
+            logger.error("Error fetching file {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
     }
 
     @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
     @PutMapping(value = "/{id}/update", consumes = "multipart/form-data")
     public ResponseEntity<FileResponse> updateFile(@PathVariable UUID id, @RequestParam("file") MultipartFile file, Authentication authentication) {
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        Long userId = userDetails.getId();
-        String username = userDetails.getUsername();
-        return ResponseEntity.ok(fileService.updateFile(id, file, userId, username));
+        try {
+            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+            Long userId = userDetails.getId();
+            String username = userDetails.getUsername();
+            return ResponseEntity.ok(fileService.updateFile(id, file, userId, username));
+        } catch (Exception e) {
+            logger.error("Error updating file {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deleteFile(@PathVariable UUID id, Authentication authentication) {
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        Long userId = userDetails.getId();
-        String username = userDetails.getUsername();
-        fileService.deleteFile(id, userId, username);
-        return ResponseEntity.ok("File deleted successfully.");
+        try {
+            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+            Long userId = userDetails.getId();
+            String username = userDetails.getUsername();
+            fileService.deleteFile(id, userId, username);
+            return ResponseEntity.ok("File deleted successfully.");
+        } catch (Exception e) {
+            logger.error("Error deleting file {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error deleting file");
+        }
     }
 
     @PreAuthorize("hasAnyRole('USER', 'MODERATOR', 'ADMIN')")
     @PostMapping("/{id}/comments")
     public ResponseEntity<FileResponse> addComment(@PathVariable UUID id, @RequestBody Map<String, String> request, Authentication authentication) {
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        String username = userDetails.getUsername();
-        String comment = request.get("comment");
-        if (comment == null || comment.trim().isEmpty()) {
-            return ResponseEntity.badRequest().build();
+        try {
+            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+            String username = userDetails.getUsername();
+            String comment = request.get("comment");
+            if (comment == null || comment.trim().isEmpty()) {
+                logger.warn("Empty comment received for file {}", id);
+                return ResponseEntity.badRequest().body(null);
+            }
+            FileResponse response = fileService.addComment(id, comment, username);
+            logger.info("Comment added to file {} by {}", id, username);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            logger.error("Invalid comment for file {}: {}", id, e.getMessage());
+            return ResponseEntity.badRequest().body(null);
+        } catch (Exception e) {
+            logger.error("Error adding comment to file {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
-        FileResponse response = fileService.addComment(id, comment, username);
-        return ResponseEntity.ok(response);
     }
 }

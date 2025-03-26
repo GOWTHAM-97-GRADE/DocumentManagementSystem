@@ -9,8 +9,8 @@ import { User } from '../models/user';
 })
 export class AuthService {
   private apiUrl = 'http://localhost:8080/api/auth';
-  private tokenKey = 'jwt';
-  private userKey = 'auth_user';
+  private tokenKey = 'jwt'; // Use 'jwt' as in the second implementation
+  private userKey = 'auth_user'; // Add userKey for storing user details in localStorage
   private user: User | null = null;
 
   constructor(private http: HttpClient) {}
@@ -36,8 +36,9 @@ export class AuthService {
             id: response.id,
             username: response.username || credentials.username,
             email: response.email,
-            roles: response.roles
+            roles: response.roles // Correctly typed as string[]
           };
+          // Store user in localStorage (from first implementation)
           localStorage.setItem(this.userKey, JSON.stringify({
             id: response.id,
             username: response.username || credentials.username,
@@ -49,13 +50,14 @@ export class AuthService {
     );
   }
 
+  // Updated login method to match the first implementation's signature
   login(username: string, password: string): Observable<any> {
     return this.signin({ username, password });
   }
 
   logout(): void {
     localStorage.removeItem(this.tokenKey);
-    localStorage.removeItem(this.userKey);
+    localStorage.removeItem(this.userKey); // Clear userKey as in first implementation
     this.user = null;
   }
 
@@ -63,6 +65,7 @@ export class AuthService {
     return !!localStorage.getItem(this.tokenKey);
   }
 
+  // Add backward compatibility for isAuthenticated (from first implementation)
   isAuthenticated(): boolean {
     return this.isLoggedIn();
   }
@@ -72,9 +75,11 @@ export class AuthService {
   }
 
   getUserDetails(): Observable<User> {
+    // If user is already in memory, return it (merge behavior)
     if (this.user) {
       return of(this.user);
     }
+    // Otherwise, fetch from backend
     return this.http.get<User>(`${this.apiUrl}/user`, {
       headers: new HttpHeaders({ Authorization: `Bearer ${this.getToken()}` })
     }).pipe(
@@ -91,9 +96,11 @@ export class AuthService {
   }
 
   getCurrentUser(): User | null {
+    // First check memory (from second implementation)
     if (this.user) {
       return this.user;
     }
+    // Then check localStorage (from first implementation)
     const user = localStorage.getItem(this.userKey);
     if (user) {
       this.user = JSON.parse(user);

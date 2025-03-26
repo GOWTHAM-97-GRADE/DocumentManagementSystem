@@ -15,6 +15,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.transaction.Transactional;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -85,15 +86,21 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
+    @Transactional
     public FileResponse addComment(UUID fileId, String comment, String username) {
         FileEntity file = fileRepository.findById(fileId)
-                .orElseThrow(() -> new FileNotFoundException("File not found"));
+                .orElseThrow(() -> new FileNotFoundException("File not found with ID: " + fileId));
 
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
-        file.getComments().add(user.getUsername() + ": " + comment + " (" + LocalDateTime.now() + ")");
-        fileRepository.save(file);
+        String fullComment = user.getUsername() + ": " + comment + " (" + LocalDateTime.now() + ")";
+        if (fullComment.length() > 1000) {
+            throw new IllegalArgumentException("Comment exceeds maximum length of 1000 characters");
+        }
+
+        file.getComments().add(fullComment);
+        fileRepository.save(file); // This now happens within the transaction
 
         auditLogService.log("COMMENT", "FILE", fileId.toString(), user.getId(), username, "Added comment: " + comment);
 

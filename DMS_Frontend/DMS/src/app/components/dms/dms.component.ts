@@ -84,8 +84,8 @@ export class DmsComponent implements OnInit {
       },
       error: (err) => {
         console.error('Load items error:', { status: err.status, message: err.message, error: err.error });
-        this.errorMessage = err.message || 'Failed to load items';
-        if (err.message.includes('No authentication token found') || err.status === 401) {
+        this.errorMessage = `Failed to load items: ${err.status === 500 ? 'Server error' : err.message}`;
+        if (err.status === 401) {
           this.router.navigate(['/login']);
         }
         this.isLoading = false;
@@ -136,15 +136,12 @@ export class DmsComponent implements OnInit {
         parentId: this.currentDirectory,
       };
       this.dmsService.createDirectory(request).subscribe({
-        next: (response) => {
-          this.items.push({ type: 'directory', id: response.id, name: response.name });
-          this.filteredItems = [...this.items];
-          this.errorMessage = '';
-          this.isLoading = false;
+        next: () => {
+          this.loadItems();
         },
         error: (err) => {
           console.error('Create directory error:', { status: err.status, message: err.message, error: err.error });
-          this.errorMessage = err.message || 'Failed to create directory';
+          this.errorMessage = `Failed to create directory: ${err.status === 500 ? 'Server error' : err.message}`;
           this.isLoading = false;
         },
       });
@@ -163,33 +160,16 @@ export class DmsComponent implements OnInit {
     if (this.selectedFiles.length > 0) {
       this.isLoading = true;
       const directoryId = this.currentDirectory;
-      const originalFileNames = this.selectedFiles.map(file => file.name);
       console.log('Uploading to directory:', directoryId);
-
       this.dmsService.uploadFiles(directoryId, this.selectedFiles).subscribe({
-        next: (responses: FileResponse[]) => {
-          console.log('Upload success:', responses);
-          responses.forEach((response, index) => {
-            const originalName = originalFileNames[index];
-            this.items.push({
-              type: 'file',
-              id: response.fileId,
-              name: response.fileName || originalName,
-              fileType: response.fileType,
-              fileSize: response.fileSize,
-              uploadedBy: response.uploadedBy,
-              uploadDate: response.uploadDate,
-              comments: response.comments || [],
-            });
-          });
-          this.filteredItems = [...this.items];
+        next: () => {
+          this.loadItems();
           this.selectedFiles = [];
           this.errorMessage = '';
-          this.isLoading = false;
         },
         error: (err) => {
           console.error('Upload files error:', { status: err.status, message: err.message, error: err.error });
-          this.errorMessage = err.message || 'Failed to upload files';
+          this.errorMessage = `Failed to upload files: ${err.status === 500 ? 'Server error' : err.message}`;
           this.isLoading = false;
         },
       });
@@ -205,15 +185,13 @@ export class DmsComponent implements OnInit {
     if (newName && newName.trim()) {
       this.isLoading = true;
       this.dmsService.renameDirectory(item.id as number, { newName: newName.trim() }).subscribe({
-        next: (response) => {
-          item.name = response.name;
-          this.filteredItems = [...this.items];
+        next: () => {
+          this.loadItems();
           this.errorMessage = '';
-          this.isLoading = false;
         },
         error: (err) => {
           console.error('Rename directory error:', { status: err.status, message: err.message, error: err.error });
-          this.errorMessage = err.message || 'Failed to rename directory';
+          this.errorMessage = `Failed to rename directory: ${err.status === 500 ? 'Server error' : err.message}`;
           this.isLoading = false;
         },
       });
@@ -238,7 +216,7 @@ export class DmsComponent implements OnInit {
       },
       error: (err) => {
         console.error('Move directory error:', { status: err.status, message: err.message, error: err.error });
-        this.errorMessage = err.message || 'Failed to move directory';
+        this.errorMessage = `Failed to move directory: ${err.status === 500 ? 'Server error' : err.message}`;
         this.isLoading = false;
       },
     });
@@ -256,17 +234,28 @@ export class DmsComponent implements OnInit {
       if (file) {
         this.isLoading = true;
         this.dmsService.updateFile(item.id as string, file).subscribe({
-          next: (response) => {
-            item.name = response.fileName;
-            item.fileType = response.fileType;
-            item.fileSize = response.fileSize;
-            this.filteredItems = [...this.items];
+          next: (response: FileResponse) => {
+            // Update the local item immediately
+            const index = this.items.findIndex(i => i.id === item.id);
+            if (index !== -1) {
+              this.items[index] = {
+                type: 'file',
+                id: response.fileId,
+                name: response.fileName,
+                fileType: response.fileType,
+                fileSize: response.fileSize,
+                uploadedBy: response.uploadedBy,
+                uploadDate: response.uploadDate,
+                comments: response.comments || [],
+              };
+              this.filteredItems = [...this.items];
+            }
+            this.loadItems(); // Still refresh from server to ensure consistency
             this.errorMessage = '';
-            this.isLoading = false;
           },
           error: (err) => {
             console.error('Update file error:', { status: err.status, message: err.message, error: err.error });
-            this.errorMessage = err.message || 'Failed to update file';
+            this.errorMessage = `Failed to update file: ${err.status === 500 ? 'Server error' : err.message}`;
             this.isLoading = false;
           },
         });
@@ -287,14 +276,11 @@ export class DmsComponent implements OnInit {
         : this.dmsService.deleteFile(item.id as string);
       serviceCall.subscribe({
         next: () => {
-          this.items = this.items.filter(i => i.id !== item.id);
-          this.filteredItems = [...this.items];
-          this.errorMessage = '';
-          this.isLoading = false;
+          this.loadItems();
         },
         error: (err) => {
           console.error('Delete item error:', { status: err.status, message: err.message, error: err.error });
-          this.errorMessage = err.message || `Failed to delete ${item.type}`;
+          this.errorMessage = `Failed to delete ${item.type}: ${err.status === 500 ? 'Server error' : err.message}`;
           this.isLoading = false;
         },
       });
@@ -322,7 +308,7 @@ export class DmsComponent implements OnInit {
       },
       error: (err) => {
         console.error('Download file error:', { status: err.status, message: err.message, error: err.error });
-        this.errorMessage = err.message || 'Failed to download file';
+        this.errorMessage = `Failed to download file: ${err.status === 500 ? 'Server error' : err.message}`;
         this.isLoading = false;
       },
     });
@@ -333,8 +319,12 @@ export class DmsComponent implements OnInit {
       this.errorMessage = 'Invalid file';
       return;
     }
-    const comment = prompt('Add a comment:');
+    const comment = prompt('Add a comment (max 500 chars):');
     if (comment && comment.trim()) {
+      if (comment.length > 500) {
+        this.errorMessage = 'Comment exceeds 500 characters';
+        return;
+      }
       this.isLoading = true;
       this.dmsService.addComment(item.id as string, comment).subscribe({
         next: (response) => {
@@ -344,8 +334,8 @@ export class DmsComponent implements OnInit {
           this.isLoading = false;
         },
         error: (err) => {
-          console.error('Add comment error:', { status: err.status, message: err.message, error: err.error });
-          this.errorMessage = err.message || 'Failed to add comment';
+          console.error('Add comment error:', err.message);
+          this.errorMessage = `Failed to add comment: ${err.message}`;
           this.isLoading = false;
         },
       });
@@ -371,9 +361,14 @@ export class DmsComponent implements OnInit {
     const extension = fileName.split('.').pop()?.toLowerCase();
     switch (extension) {
       case 'pdf': return '📕';
-      case 'doc': case 'docx': return '📘';
-      case 'xls': case 'xlsx': return '📗';
-      case 'jpg': case 'jpeg': case 'png': case 'gif': return '🖼️';
+      case 'doc': 
+      case 'docx': return '📘';
+      case 'xls': 
+      case 'xlsx': return '📗';
+      case 'jpg': 
+      case 'jpeg': 
+      case 'png': 
+      case 'gif': return '🖼️';
       default: return '📄';
     }
   }
