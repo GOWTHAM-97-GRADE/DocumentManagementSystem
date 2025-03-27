@@ -5,7 +5,10 @@ import com.student.DocumentManagementSystem.security.services.UserDetailsImpl;
 import com.student.DocumentManagementSystem.service.FileService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -27,6 +30,8 @@ public class FileController {
     public FileController(FileService fileService) {
         this.fileService = fileService;
     }
+
+    // Existing endpoints remain unchanged...
 
     @PreAuthorize("hasAnyRole('USER', 'MODERATOR', 'ADMIN')")
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
@@ -80,7 +85,15 @@ public class FileController {
             UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
             Long userId = userDetails.getId();
             String username = userDetails.getUsername();
-            return ResponseEntity.ok(fileService.updateFile(id, file, userId, username));
+            FileResponse response = fileService.updateFile(id, file, userId, username);
+            if (response == null) {
+                logger.error("FileService returned null for file update: {}", id);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+            }
+            logger.info("Update file response for ID {}: {}", id, response);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_JSON) // Explicitly set Content-Type
+                    .body(response);
         } catch (Exception e) {
             logger.error("Error updating file {}: {}", id, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
@@ -122,6 +135,36 @@ public class FileController {
         } catch (Exception e) {
             logger.error("Error adding comment to file {}: {}", id, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+
+    // New download endpoint
+    @PreAuthorize("hasAnyRole('USER', 'MODERATOR', 'ADMIN')")
+    @GetMapping("/{id}/download")
+    public ResponseEntity<ByteArrayResource> downloadFile(@PathVariable UUID id) {
+        try {
+            logger.info("Request to download file with ID: {}", id);
+            FileResponse fileResponse = fileService.getFile(id);
+
+            // Get the raw file bytes
+            byte[] fileData = fileService.getFileEntity(id).getFileData();
+
+            // Set headers for file download
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType(fileResponse.getFileType() != null ? fileResponse.getFileType() : "application/octet-stream"));
+            headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileResponse.getFileName() + "\"");
+            headers.setContentLength(fileData.length);
+
+            ByteArrayResource resource = new ByteArrayResource(fileData);
+
+            logger.info("Successfully prepared file {} for download", fileResponse.getFileName());
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(resource);
+        } catch (Exception e) {
+            logger.error("Error downloading file {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(null);
         }
     }
 }

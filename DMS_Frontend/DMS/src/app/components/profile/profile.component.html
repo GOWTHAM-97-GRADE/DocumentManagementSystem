@@ -1,0 +1,46 @@
+<div class="profile-container" [ngClass]="{'dark-theme': isDarkTheme}">
+  <header class="header">
+    <h1>
+      <span class="highlight">oneDMS</span> Document Management
+      <div class="header-actions">
+        <span class="theme-switch">
+          <label class="switch" for="theme-toggle">
+            <input
+              id="theme-toggle"
+              type="checkbox"
+              [(ngModel)]="isDarkTheme"
+              (ngModelChange)="toggleTheme($event)"
+              aria-label="Toggle dark theme"
+            />
+            <span class="slider round"></span>
+          </label>
+          <span class="theme-label">Theme</span>
+        </span>
+        <button class="btn logout" (click)="logout()" aria-label="Log out">
+          <span class="icon">🚪</span> Logout
+        </button>
+      </div>
+    </h1>
+    <nav class="nav-bar">
+      <ul>
+        <li><a routerLink="/dms" routerLinkActive="active">DMS</a></li>
+        <li><a routerLink="/audit-log" routerLinkActive="active">Audit Log</a></li>
+        <li><a routerLink="/profile" routerLinkActive="active">Profile</a></li>
+        <li *ngIf="isAdminUser()">
+          <a routerLink="/admin" routerLinkActive="active">Admin</a>
+        </li>
+      </ul>
+    </nav>
+  </header>
+  <main class="content">
+    <h2>User Profile</h2>
+    <div class="profile-info" *ngIf="user">
+      <p><strong>Username:</strong> {{ user.username }}</p>
+      <p><strong>Email:</strong> {{ user.email }}</p>
+      <p><strong>Roles:</strong> {{ user.roles.join(', ') }}</p>
+    </div>
+    <div *ngIf="!user" class="empty-state">
+      <div class="empty-text">No user information available</div>
+    </div>
+  </main>
+</div>

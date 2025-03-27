@@ -12,6 +12,7 @@
   padding: 20px;
   box-sizing: border-box;
   position: relative;
+  border-radius:12px;
 }
 
 /* Dark Theme for Page */

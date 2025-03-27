@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
-import { Observable, throwError } from 'rxjs';
+import { HttpClient, HttpHeaders, HttpParams, HttpResponse as AngularHttpResponse } from '@angular/common/http';
+import { Observable, throwError, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { AuthService } from './auth.service';
 
@@ -127,19 +127,59 @@ export class DmsService {
   }
 
   updateFile(fileId: string, file: File): Observable<FileResponse> {
+    if (!fileId || !file) {
+      console.error('Invalid input for updateFile:', { fileId, file });
+      return throwError(() => new Error('File ID or file is missing'));
+    }
     const formData = new FormData();
     formData.append('file', file);
     const headers = this.getAuthHeaders();
-    return this.http.put<FileResponse>(`${this.apiUrl}/files/${fileId}/update`, formData, { headers })
-      .pipe(
-        map((response: FileResponse) => {
-          if (!response.fileId || !response.fileName) {
-            throw new Error('Invalid update response from server');
+    return this.http.put<FileResponse>(`${this.apiUrl}/files/${fileId}/update`, formData, { 
+      headers,
+      observe: 'response' // Get full HTTP response
+    }).pipe(
+      map((response: AngularHttpResponse<FileResponse>) => {
+        console.log('Raw server response:', response); // Debug the response
+        const body: FileResponse | null = response.body;
+        if (response.status === 200) {
+          if (!body || !body.fileId || !body.fileName) {
+            console.warn('Server returned incomplete or no JSON response, assuming update succeeded:', body);
+            // Fallback to a minimal FileResponse based on input
+            return {
+              fileId,
+              fileName: file.name,
+              fileType: file.type || 'application/octet-stream',
+              fileSize: file.size,
+              uploadDate: new Date().toISOString(),
+              uploadedBy: this.authService.getCurrentUser()?.username || 'unknown',
+              comments: []
+            } as FileResponse;
           }
-          return response;
-        }),
-        catchError(this.handleError('Update file'))
-      );
+          return body; // Valid FileResponse
+        }
+        throw new Error(`Unexpected status code: ${response.status}`);
+      }),
+      catchError((err) => {
+        console.error('Update file error:', err);
+        // If parsing fails but status is 200, assume success and return fallback
+        if (err.status === 200) {
+          console.warn('Update succeeded but response parsing failed, using fallback');
+          return of({
+            fileId,
+            fileName: file.name,
+            fileType: file.type || 'application/octet-stream',
+            fileSize: file.size,
+            uploadDate: new Date().toISOString(),
+            uploadedBy: this.authService.getCurrentUser()?.username || 'unknown',
+            comments: []
+          } as FileResponse);
+        }
+        const errorMsg = err.status === 404 
+          ? `File with ID ${fileId} not found`
+          : `Update failed: ${err.statusText || 'Unknown error'}`;
+        return throwError(() => new Error(errorMsg));
+      })
+    );
   }
 
   deleteFile(fileId: string): Observable<void> {
@@ -157,17 +197,18 @@ export class DmsService {
   }
 
   downloadFile(fileId: string): Observable<Blob> {
-    const headers = this.getJsonHeaders();
-    return this.http.get<FileResponse>(`${this.apiUrl}/files/${fileId}`, { headers }).pipe(
-      map(response => {
-        if (!response.fileData) {
-          throw new Error('No file data in response');
-        }
-        // Ensure correct content type from backend
-        const contentType = response.fileType || 'application/octet-stream';
-        return this.base64ToBlob(response.fileData, contentType);
-      }),
-      catchError(this.handleError('Download file'))
+    const headers = this.getAuthHeaders();
+    return this.http.get(`${this.apiUrl}/files/${fileId}/download`, {
+      headers,
+      responseType: 'blob' // Expect binary response
+    }).pipe(
+      catchError((err) => {
+        const errorMsg = err.status === 404 
+          ? `File with ID ${fileId} not found on server` 
+          : `Download failed: ${err.statusText || 'Unknown error'}`;
+        console.error('Download file error:', { status: err.status, message: errorMsg, error: err });
+        return throwError(() => new Error(errorMsg));
+      })
     );
   }
 

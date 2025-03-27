@@ -24,7 +24,6 @@ interface DmsItem {
   styleUrls: ['./dms.component.css'],
 })
 export class DmsComponent implements OnInit {
-  isDarkTheme: boolean = false;
   items: DmsItem[] = [];
   filteredItems: DmsItem[] = [];
   currentDirectory: number = 1;
@@ -35,6 +34,7 @@ export class DmsComponent implements OnInit {
   isLoading: boolean = false;
   searchQuery: string = '';
   viewMode: 'grid' | 'list' = 'grid';
+  isDarkTheme: boolean = false;
 
   constructor(
     private router: Router,
@@ -43,14 +43,33 @@ export class DmsComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    const savedTheme = localStorage.getItem('isDarkTheme');
-    this.isDarkTheme = savedTheme === 'true';
     if (!this.authService.getToken()) {
-      this.errorMessage = 'Please log in to access the Document Management System';
       this.router.navigate(['/login']);
       return;
     }
+    const savedTheme = localStorage.getItem('isDarkTheme');
+    this.isDarkTheme = savedTheme === 'true';
     this.loadItems();
+  }
+
+  toggleTheme(newTheme: boolean) {
+    this.isDarkTheme = newTheme;
+    localStorage.setItem('isDarkTheme', newTheme.toString());
+  }
+
+  logout() {
+    this.authService.logout();
+    this.router.navigate(['/login']);
+  }
+
+  isAdminUser(): boolean {
+    const user = this.authService.getCurrentUser();
+    return user?.roles?.includes('ROLE_ADMIN') || false;
+  }
+
+  isModeratorOrAdmin(): boolean {
+    const user = this.authService.getCurrentUser();
+    return user?.roles?.some(role => ['ROLE_MODERATOR', 'ROLE_ADMIN'].includes(role)) || false;
   }
 
   loadItems() {
@@ -63,6 +82,8 @@ export class DmsComponent implements OnInit {
               type: 'directory' as const,
               id: dir.id,
               name: dir.name,
+              uploadedBy: dir.createdBy || 'Unknown', // Ensure uploadedBy is set for directories if available
+              uploadDate: undefined, // Directories may not have uploadDate, adjust if backend provides it
             })),
             ...response.files.map(file => ({
               type: 'file' as const,
@@ -70,8 +91,8 @@ export class DmsComponent implements OnInit {
               name: file.fileName,
               fileType: file.fileType,
               fileSize: file.fileSize,
-              uploadedBy: file.uploadedBy,
-              uploadDate: file.uploadDate,
+              uploadedBy: file.uploadedBy || 'Unknown', // Fallback if uploadedBy is missing
+              uploadDate: file.uploadDate || new Date().toISOString(), // Fallback to current date if missing
               comments: file.comments || [],
             })),
           ];
@@ -91,11 +112,6 @@ export class DmsComponent implements OnInit {
         this.isLoading = false;
       },
     });
-  }
-
-  toggleTheme(newTheme: boolean) {
-    this.isDarkTheme = newTheme;
-    localStorage.setItem('isDarkTheme', newTheme.toString());
   }
 
   navigateToDirectory(id: number, name: string) {
@@ -127,24 +143,34 @@ export class DmsComponent implements OnInit {
     }
   }
 
-  createDirectory() {
-    const name = prompt('Enter directory name:');
-    if (name && name.trim()) {
-      this.isLoading = true;
-      const request: CreateDirectoryRequest = {
-        name: name.trim(),
-        parentId: this.currentDirectory,
-      };
-      this.dmsService.createDirectory(request).subscribe({
-        next: () => {
-          this.loadItems();
-        },
-        error: (err) => {
-          console.error('Create directory error:', { status: err.status, message: err.message, error: err.error });
-          this.errorMessage = `Failed to create directory: ${err.status === 500 ? 'Server error' : err.message}`;
-          this.isLoading = false;
-        },
-      });
+  searchDocuments() {
+    if (this.searchQuery.trim() === '') {
+      this.filteredItems = [...this.items];
+    } else {
+      this.filteredItems = this.items.filter(item =>
+        item.name.toLowerCase().includes(this.searchQuery.toLowerCase())
+      );
+    }
+  }
+
+  setView(mode: 'grid' | 'list') {
+    this.viewMode = mode;
+  }
+
+  getFileIcon(fileName: string | undefined): string {
+    if (!fileName) return '📄';
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    switch (extension) {
+      case 'pdf': return '📕';
+      case 'doc':
+      case 'docx': return '📘';
+      case 'xls':
+      case 'xlsx': return '📗';
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif': return '🖼️';
+      default: return '📄';
     }
   }
 
@@ -159,17 +185,36 @@ export class DmsComponent implements OnInit {
   uploadFiles() {
     if (this.selectedFiles.length > 0) {
       this.isLoading = true;
-      const directoryId = this.currentDirectory;
-      console.log('Uploading to directory:', directoryId);
-      this.dmsService.uploadFiles(directoryId, this.selectedFiles).subscribe({
+      this.dmsService.uploadFiles(this.currentDirectory, this.selectedFiles).subscribe({
         next: () => {
           this.loadItems();
           this.selectedFiles = [];
           this.errorMessage = '';
         },
         error: (err) => {
-          console.error('Upload files error:', { status: err.status, message: err.message, error: err.error });
-          this.errorMessage = `Failed to upload files: ${err.status === 500 ? 'Server error' : err.message}`;
+          console.error('Upload files error:', err.message);
+          this.errorMessage = `Failed to upload files: ${err.message}`;
+          this.isLoading = false;
+        },
+      });
+    }
+  }
+
+  createDirectory() {
+    const name = prompt('Enter directory name:');
+    if (name && name.trim()) {
+      this.isLoading = true;
+      const request: CreateDirectoryRequest = {
+        name: name.trim(),
+        parentId: this.currentDirectory,
+      };
+      this.dmsService.createDirectory(request).subscribe({
+        next: () => {
+          this.loadItems();
+        },
+        error: (err) => {
+          console.error('Create directory error:', err.message);
+          this.errorMessage = `Failed to create directory: ${err.message}`;
           this.isLoading = false;
         },
       });
@@ -190,8 +235,8 @@ export class DmsComponent implements OnInit {
           this.errorMessage = '';
         },
         error: (err) => {
-          console.error('Rename directory error:', { status: err.status, message: err.message, error: err.error });
-          this.errorMessage = `Failed to rename directory: ${err.status === 500 ? 'Server error' : err.message}`;
+          console.error('Rename directory error:', err.message);
+          this.errorMessage = `Failed to rename directory: ${err.message}`;
           this.isLoading = false;
         },
       });
@@ -215,8 +260,8 @@ export class DmsComponent implements OnInit {
         this.loadItems();
       },
       error: (err) => {
-        console.error('Move directory error:', { status: err.status, message: err.message, error: err.error });
-        this.errorMessage = `Failed to move directory: ${err.status === 500 ? 'Server error' : err.message}`;
+        console.error('Move directory error:', err.message);
+        this.errorMessage = `Failed to move directory: ${err.message}`;
         this.isLoading = false;
       },
     });
@@ -231,87 +276,38 @@ export class DmsComponent implements OnInit {
     input.type = 'file';
     input.onchange = (event: Event) => {
       const file = (event.target as HTMLInputElement).files?.[0];
-      if (file) {
-        this.isLoading = true;
-        this.dmsService.updateFile(item.id as string, file).subscribe({
-          next: (response: FileResponse) => {
-            // Update the local item immediately
-            const index = this.items.findIndex(i => i.id === item.id);
-            if (index !== -1) {
-              this.items[index] = {
-                type: 'file',
-                id: response.fileId,
-                name: response.fileName,
-                fileType: response.fileType,
-                fileSize: response.fileSize,
-                uploadedBy: response.uploadedBy,
-                uploadDate: response.uploadDate,
-                comments: response.comments || [],
-              };
-              this.filteredItems = [...this.items];
-            }
-            this.loadItems(); // Still refresh from server to ensure consistency
-            this.errorMessage = '';
-          },
-          error: (err) => {
-            console.error('Update file error:', { status: err.status, message: err.message, error: err.error });
-            this.errorMessage = `Failed to update file: ${err.status === 500 ? 'Server error' : err.message}`;
-            this.isLoading = false;
-          },
-        });
+      if (!file) {
+        this.errorMessage = 'No file selected';
+        return;
       }
-    };
-    input.click();
-  }
-
-  deleteItem(item: DmsItem) {
-    if (!this.isAdminUser() || !item.id) {
-      this.errorMessage = 'Invalid item or insufficient permissions';
-      return;
-    }
-    if (confirm(`Delete ${item.type} "${item.name}"?`)) {
       this.isLoading = true;
-      const serviceCall = item.type === 'directory'
-        ? this.dmsService.deleteDirectory(item.id as number)
-        : this.dmsService.deleteFile(item.id as string);
-      serviceCall.subscribe({
-        next: () => {
-          this.loadItems();
+      this.dmsService.updateFile(item.id as string, file).subscribe({
+        next: (response: FileResponse) => {
+          const index = this.items.findIndex(i => i.id === item.id);
+          if (index !== -1) {
+            this.items[index] = {
+              type: 'file',
+              id: response.fileId,
+              name: response.fileName,
+              fileType: response.fileType,
+              fileSize: response.fileSize,
+              uploadedBy: response.uploadedBy || 'Unknown',
+              uploadDate: response.uploadDate || new Date().toISOString(),
+              comments: response.comments || [],
+            };
+            this.filteredItems = [...this.items];
+          }
+          this.errorMessage = '';
+          this.isLoading = false;
         },
         error: (err) => {
-          console.error('Delete item error:', { status: err.status, message: err.message, error: err.error });
-          this.errorMessage = `Failed to delete ${item.type}: ${err.status === 500 ? 'Server error' : err.message}`;
+          console.error('Update file error:', err.message);
+          this.errorMessage = `Failed to update file: ${err.message}`;
           this.isLoading = false;
         },
       });
-    }
-  }
-
-  downloadFile(item: DmsItem) {
-    if (item.type !== 'file' || !item.id) {
-      this.errorMessage = 'Invalid file';
-      return;
-    }
-    this.isLoading = true;
-    this.dmsService.downloadFile(item.id as string).subscribe({
-      next: (blob) => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = item.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        this.errorMessage = '';
-        this.isLoading = false;
-      },
-      error: (err) => {
-        console.error('Download file error:', { status: err.status, message: err.message, error: err.error });
-        this.errorMessage = `Failed to download file: ${err.status === 500 ? 'Server error' : err.message}`;
-        this.isLoading = false;
-      },
-    });
+    };
+    input.click();
   }
 
   addComment(item: DmsItem) {
@@ -342,44 +338,53 @@ export class DmsComponent implements OnInit {
     }
   }
 
-  searchDocuments() {
-    if (this.searchQuery.trim() === '') {
-      this.filteredItems = [...this.items];
-    } else {
-      this.filteredItems = this.items.filter(item =>
-        item.name.toLowerCase().includes(this.searchQuery.toLowerCase())
-      );
+  downloadFile(item: DmsItem) {
+    if (item.type !== 'file' || !item.id) {
+      this.errorMessage = 'Invalid file';
+      return;
     }
+    this.isLoading = true;
+    this.dmsService.downloadFile(item.id as string).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = item.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        this.errorMessage = '';
+        this.isLoading = false;
+      },
+      error: (err) => {
+        console.error('Download file error:', err.message);
+        this.errorMessage = `Failed to download file: ${err.message}`;
+        this.isLoading = false;
+      },
+    });
   }
 
-  setView(mode: 'grid' | 'list') {
-    this.viewMode = mode;
-  }
-
-  getFileIcon(fileName: string | undefined): string {
-    if (!fileName) return '📄';
-    const extension = fileName.split('.').pop()?.toLowerCase();
-    switch (extension) {
-      case 'pdf': return '📕';
-      case 'doc': 
-      case 'docx': return '📘';
-      case 'xls': 
-      case 'xlsx': return '📗';
-      case 'jpg': 
-      case 'jpeg': 
-      case 'png': 
-      case 'gif': return '🖼️';
-      default: return '📄';
+  deleteItem(item: DmsItem) {
+    if (!this.isAdminUser() || !item.id) {
+      this.errorMessage = 'Invalid item or insufficient permissions';
+      return;
     }
-  }
-
-  isAdminUser(): boolean {
-    const user = this.authService.getCurrentUser();
-    return user?.roles?.includes('ROLE_ADMIN') || false;
-  }
-
-  isModeratorOrAdmin(): boolean {
-    const user = this.authService.getCurrentUser();
-    return user?.roles?.some(role => ['ROLE_MODERATOR', 'ROLE_ADMIN'].includes(role)) || false;
+    if (confirm(`Delete ${item.type} "${item.name}"?`)) {
+      this.isLoading = true;
+      const serviceCall = item.type === 'directory'
+        ? this.dmsService.deleteDirectory(item.id as number)
+        : this.dmsService.deleteFile(item.id as string);
+      serviceCall.subscribe({
+        next: () => {
+          this.loadItems();
+        },
+        error: (err) => {
+          console.error('Delete item error:', err.message);
+          this.errorMessage = `Failed to delete ${item.type}: ${err.message}`;
+          this.isLoading = false;
+        },
+      });
+    }
   }
 }

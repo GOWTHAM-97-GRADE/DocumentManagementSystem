@@ -1,30 +1,57 @@
-<div class="admin-container">
-  <h2>User Management</h2>
-  <div class="toolbar">
-    <button (click)="deleteAllUsers()">Delete All Users</button>
-  </div>
-  <div class="error" *ngIf="errorMessage">{{ errorMessage }}</div>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Username</th>
-        <th>Email</th>
-        <th>Enabled</th>
-        <th>Roles</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr *ngFor="let user of users">
-        <td>{{ user.id }}</td>
-        <td>{{ user.username }}</td>
-        <td>{{ user.email }}</td>
-        <td>{{ isUserEnabled(user.enabled) }}</td> <!-- Use helper method -->
-        <td>{{ user.roles.join(', ') }}</td>
-        <td><button (click)="deleteUser(user.id)">Delete</button></td>
-      </tr>
-    </tbody>
-  </table>
-  <div class="no-users" *ngIf="users.length === 0 && !errorMessage">No users found.</div>
+<div class="admin-container" [ngClass]="{'dark-theme': isDarkTheme}">
+  <header class="header">
+    <h1>
+      <span class="highlight">oneDMS</span> Admin Panel
+      <div class="header-actions">
+        <span class="theme-switch">
+          <label class="switch">
+            <input type="checkbox" [(ngModel)]="isDarkTheme" (ngModelChange)="toggleTheme($event)" />
+            <span class="slider round"></span>
+          </label>
+          <span class="theme-label">Theme</span>
+        </span>
+        <button class="btn logout" (click)="logout()">🚪 Logout</button>
+      </div>
+    </h1>
+    <nav class="nav-bar">
+      <ul>
+        <li><a routerLink="/dms" routerLinkActive="active">DMS</a></li>
+        <li><a routerLink="/audit-log" routerLinkActive="active">Audit Log</a></li>
+        <li><a routerLink="/profile" routerLinkActive="active">Profile</a></li>
+        <li><a routerLink="/admin" routerLinkActive="active">Admin</a></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="content">
+    <h2>User Management</h2>
+    <div class="toolbar">
+      <button (click)="deleteAllUsers()">Delete All Users</button>
+    </div>
+    <div class="error" *ngIf="errorMessage">{{ errorMessage }}</div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Enabled</th>
+            <th>Roles</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let user of users">
+            <td>{{ user.id }}</td>
+            <td>{{ user.username }}</td>
+            <td>{{ user.email }}</td>
+            <td>{{ isUserEnabled(user.enabled) }}</td>
+            <td>{{ user.roles.join(', ') }}</td>
+            <td><button (click)="deleteUser(user.id)">Delete</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="no-users" *ngIf="users.length === 0 && !errorMessage">No users found.</div>
+  </main>
 </div>

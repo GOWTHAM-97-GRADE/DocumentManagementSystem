@@ -1,0 +1,88 @@
+<div class="audit-log-container" [ngClass]="{'dark-theme': isDarkTheme}">
+  <header class="header">
+    <h1>
+      <span class="highlight">oneDMS</span> Document Management
+      <div class="header-actions">
+        <span class="theme-switch">
+          <label class="switch">
+            <input type="checkbox" [(ngModel)]="isDarkTheme" (ngModelChange)="toggleTheme($event)" />
+            <span class="slider round"></span>
+          </label>
+          <span class="theme-label">Theme</span>
+        </span>
+        <button class="btn logout" (click)="logout()">🚪 Logout</button>
+      </div>
+    </h1>
+    <nav class="nav-bar">
+      <ul>
+        <li><a routerLink="/dms" routerLinkActive="active">DMS</a></li>
+        <li><a routerLink="/audit-log" routerLinkActive="active">Audit Log</a></li>
+        <li><a routerLink="/profile" routerLinkActive="active">Profile</a></li>
+        <li *ngIf="isAdminUser()"><a routerLink="/admin" routerLinkActive="active">Admin</a></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="content">
+    <h2>Audit Logs</h2>
+    <div class="filters">
+      <input type="number" placeholder="User ID" [(ngModel)]="userId" (ngModelChange)="fetchLogs()" />
+      <select [(ngModel)]="operation" (ngModelChange)="fetchLogs()">
+        <option value="">All Operations</option>
+        <option value="CREATE">Create</option>
+        <option value="RENAME">Rename</option>
+        <option value="MOVE">Move</option>
+        <option value="DELETE">Delete</option>
+        <option value="COMMENT">Comment</option>
+        <option value="UPDATE">Update</option>
+      </select>
+      <select [(ngModel)]="entityType" (ngModelChange)="fetchLogs()">
+        <option value="">All Entity Types</option>
+        <option value="DIRECTORY">Directory</option>
+        <option value="FILE">File</option>
+      </select>
+      <input type="date" [(ngModel)]="startDate" (ngModelChange)="fetchLogs()" />
+      <input type="date" [(ngModel)]="endDate" (ngModelChange)="fetchLogs()" />
+      <button class="btn primary" (click)="fetchLogs()" [disabled]="isLoading">Fetch Logs</button>
+      <button class="btn secondary" (click)="exportToPdf()" [disabled]="isLoading">Export to PDF</button>
+    </div>
+    <div class="error" *ngIf="errorMessage">{{ errorMessage }}</div>
+    <div class="loading-state" *ngIf="isLoading">
+      <div class="spinner"></div>
+      <span>Loading...</span>
+    </div>
+    <div class="logs-table" *ngIf="!isLoading">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Timestamp</th>
+              <th>User ID</th>
+              <th>Username</th>
+              <th>Operation</th>
+              <th>Entity Type</th>
+              <th>Entity ID</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let log of logs">
+              <td>{{ log.id }}</td>
+              <td>{{ log.timestamp | date:'medium' }}</td>
+              <td>{{ log.userId }}</td>
+              <td>{{ log.username }}</td>
+              <td>{{ log.operation }}</td>
+              <td>{{ log.entityType }}</td>
+              <td>{{ log.entityId }}</td>
+              <td>{{ log.details }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="empty-state" *ngIf="!logs.length && !errorMessage">
+        <span class="empty-icon">📂</span>
+        <div class="empty-text">No logs found</div>
+      </div>
+    </div>
+  </main>
+</div>
