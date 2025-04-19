@@ -29,25 +29,10 @@ The **Document Management System (DMS)**, branded as **oneDMS**, is a web-based 
 - **Forgot Password Page**: Assists users in resetting passwords via registered email or username.
 - **DMS Application Page**: Main hub for document management, featuring audit logs, admin panel, smart filters, favorites, and collaboration tools.
 
-## Installation
-1. Clone the repository:
+## Clone the repository:
    ```bash
    git clone https://github.com/GOWTHAM-97-GRADE/DocumentManagementSystem.git
    ```
-2. Navigate to the project directory:
-   ```bash
-   cd oneDMS
-   ```
-3. Install dependencies (update with specific dependencies based on your tech stack, e.g., Node.js, Python, etc.):
-   ```bash
-   npm install  # Example for Node.js-based projects
-   ```
-4. Configure environment variables (e.g., database connection, authentication settings) in a `.env` file.
-5. Run the application:
-   ```bash
-   npm start  # Example for Node.js-based projects
-   ```
-
 ## Usage
 - Access the application via the browser at `http://localhost:<port>`.
 - Sign up for a new account or log in with existing credentials.
